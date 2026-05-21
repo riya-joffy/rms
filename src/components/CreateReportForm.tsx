@@ -1,321 +1,339 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
-import { MarketReport, MarketMetrics, Attachment } from '../types';
+import React, { useState, useEffect } from 'react';
+import { MarketReport } from '../types';
 import { useReports } from '../context/ReportContext';
 
 interface CreateReportFormProps {
   onSuccess: () => void;
   onCancel: () => void;
+  reportToEdit?: MarketReport | null;
 }
 
-export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, onCancel }) => {
+export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, onCancel, reportToEdit }) => {
   const { createReport } = useReports();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form Fields State
-  const [region, setRegion] = useState('North America');
-  const [category, setCategory] = useState<'Competitor Intelligence' | 'Consumer Trends' | 'Pricing Analysis' | 'Inventory & Supply' | 'Promotional Tracking'>('Competitor Intelligence');
-  const [observations, setObservations] = useState('');
-  const [issuesFound, setIssuesFound] = useState('');
-  const [recommendations, setRecommendations] = useState('');
+  const [activityType, setActivityType] = useState('Hospital Visit');
+  const [meetingType, setMeetingType] = useState('Physical');
+  const [institutionName, setInstitutionName] = useState('');
+  const [location, setLocation] = useState('');
+  const [finalYearStudentsCount, setFinalYearStudentsCount] = useState('0');
+  const [headOfInstitution, setHeadOfInstitution] = useState('');
+  const [contactNumber, setContactNumber] = useState('');
+  const [spocName, setSpocName] = useState('');
+  const [spocContact, setSpocContact] = useState('');
+  const [spocEmail, setSpocEmail] = useState('');
+  const [notes, setNotes] = useState('');
+  const [dateTime, setDateTime] = useState('');
+  const [reportStatus, setReportStatus] = useState<'Draft' | 'Pending'>('Draft');
 
-  // Metrics Fields State
-  const [footTraffic, setFootTraffic] = useState<'Low' | 'Medium' | 'High'>('Medium');
-  const [salesVolume, setSalesVolume] = useState('50000');
-  const [competitorPricingIndex, setCompetitorPricingIndex] = useState('100');
-  const [customerSatisfaction, setCustomerSatisfaction] = useState('4');
-
-  // Attachments State
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      simulateFileUpload(e.dataTransfer.files[0]);
+  // Pre-populate fields if editing an existing draft
+  useEffect(() => {
+    if (reportToEdit) {
+      setActivityType(reportToEdit.activityType || 'Hospital Visit');
+      setMeetingType(reportToEdit.meetingType || 'Physical');
+      setInstitutionName(reportToEdit.institutionName || '');
+      setLocation(reportToEdit.location || '');
+      setFinalYearStudentsCount(reportToEdit.finalYearStudentsCount ? String(reportToEdit.finalYearStudentsCount) : '0');
+      setHeadOfInstitution(reportToEdit.headOfInstitution || '');
+      setContactNumber(reportToEdit.contactNumber || '');
+      setSpocName(reportToEdit.spocName || '');
+      setSpocContact(reportToEdit.spocContact || '');
+      setSpocEmail(reportToEdit.spocEmail || '');
+      setNotes(reportToEdit.notes || '');
+      setDateTime(reportToEdit.dateTime || '');
+      setReportStatus(reportToEdit.status === 'Pending' ? 'Pending' : 'Draft');
+    } else {
+      clearFormFields();
     }
+  }, [reportToEdit]);
+
+  const clearFormFields = () => {
+    setActivityType('Hospital Visit');
+    setMeetingType('Physical');
+    setInstitutionName('');
+    setLocation('');
+    setFinalYearStudentsCount('0');
+    setHeadOfInstitution('');
+    setContactNumber('');
+    setSpocName('');
+    setSpocContact('');
+    setSpocEmail('');
+    setNotes('');
+    setDateTime('');
+    setReportStatus('Draft');
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      simulateFileUpload(e.target.files[0]);
-    }
-  };
-
-  const simulateFileUpload = (file: File) => {
-    setIsUploading(true);
-    setUploadProgress(10);
-    
-    // Simulate uploading increments
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
-            const newAttachment: Attachment = {
-              id: `att-${Date.now()}`,
-              name: file.name,
-              size: `${sizeInMB} MB`,
-              type: file.type || 'application/octet-stream',
-              url: '#'
-            };
-            setAttachments(prevAtt => [...prevAtt, newAttachment]);
-            setIsUploading(false);
-            setUploadProgress(0);
-          }, 200);
-          return 100;
-        }
-        return prev + 30;
-      });
-    }, 150);
-  };
-
-  const handleRemoveAttachment = (id: string) => {
-    setAttachments(prev => prev.filter(att => att.id !== id));
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSaveDraft = (e: React.MouseEvent) => {
     e.preventDefault();
-    
-    if (!observations.trim()) {
-      alert('Please fill out observations.');
-      return;
-    }
-    if (!recommendations.trim()) {
-      alert('Please fill out strategic recommendations.');
+    if (!institutionName.trim()) {
+      alert('Please fill out the Institution/Hospital Name to save a draft.');
       return;
     }
 
     const reportData = {
+      id: reportToEdit?.id,
+      status: 'Draft' as const,
+      activityType,
+      meetingType,
+      institutionName,
+      location,
+      finalYearStudentsCount: Number(finalYearStudentsCount) || 0,
+      headOfInstitution,
+      contactNumber,
+      spocName,
+      spocContact,
+      spocEmail,
+      notes,
+      dateTime,
       date: new Date().toISOString().split('T')[0],
       time: new Date().toTimeString().split(' ')[0].slice(0, 5),
-      region,
-      category,
-      observations,
-      metrics: {
-        footTraffic,
-        salesVolume: Number(salesVolume) || 0,
-        competitorPricingIndex: Number(competitorPricingIndex) || 100,
-        customerSatisfaction: Number(customerSatisfaction) || 4
-      },
-      issuesFound,
-      recommendations,
-      attachments
+      attachments: reportToEdit?.attachments || []
     };
 
     createReport(reportData);
+    clearFormFields();
     onSuccess();
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!institutionName.trim()) {
+      alert('Institution/Hospital Name is required.');
+      return;
+    }
+    if (!location.trim()) {
+      alert('Location is required.');
+      return;
+    }
+    if (!dateTime.trim()) {
+      alert('Date and Time are required.');
+      return;
+    }
+
+    const reportData = {
+      id: reportToEdit?.id,
+      status: 'Pending' as const,
+      activityType,
+      meetingType,
+      institutionName,
+      location,
+      finalYearStudentsCount: Number(finalYearStudentsCount) || 0,
+      headOfInstitution,
+      contactNumber,
+      spocName,
+      spocContact,
+      spocEmail,
+      notes,
+      dateTime,
+      date: new Date().toISOString().split('T')[0],
+      time: new Date().toTimeString().split(' ')[0].slice(0, 5),
+      attachments: reportToEdit?.attachments || []
+    };
+
+    createReport(reportData);
+    clearFormFields();
+    onSuccess();
+  };
+
+  const handleClear = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (window.confirm('Are you sure you want to clear all form fields?')) {
+      clearFormFields();
+    }
+  };
+
   return (
-    <form className="login-form" onSubmit={handleSubmit} style={{ width: '100%' }}>
-      <div className="form-grid">
+    <form className="login-form" onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '100%', padding: '24px', backgroundColor: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-muted)' }}>
+      
+      {reportToEdit && (
+        <div style={{ padding: '12px 16px', backgroundColor: 'rgba(168, 85, 247, 0.1)', border: '1px solid var(--primary-glow)', borderRadius: 'var(--radius-md)', marginBottom: '24px', fontSize: '0.85rem', color: 'var(--text-main)' }}>
+          <strong>Editing Draft:</strong> You are modifying draft report <strong>{reportToEdit.id}</strong>.
+        </div>
+      )}
+
+      {/* Section 1: Core Activity details */}
+      <h3 style={{ color: 'var(--primary)', marginBottom: '16px', borderBottom: '1px solid var(--border-muted)', paddingBottom: '8px', fontSize: '1.1rem' }}>
+        1. Activity & Meeting Schedule
+      </h3>
+      <div className="form-grid" style={{ marginBottom: '32px' }}>
         
-        {/* Region */}
         <div className="form-group">
-          <label className="form-label">Location / Target Region</label>
+          <label className="form-label">Activity Type</label>
           <select 
             className="form-select"
-            value={region}
-            onChange={(e) => setRegion(e.target.value)}
+            value={activityType}
+            onChange={(e) => setActivityType(e.target.value)}
           >
-            <option>North America</option>
-            <option>Europe</option>
-            <option>Asia Pacific</option>
-            <option>Latin America</option>
-            <option>Middle East</option>
+            <option>Hospital Visit</option>
+            <option>Institution Visit</option>
+            <option>SPOC Meeting</option>
+            <option>Seminar</option>
+            <option>Other</option>
           </select>
         </div>
 
-        {/* Intelligence Category */}
         <div className="form-group">
-          <label className="form-label">Intelligence Category</label>
+          <label className="form-label">Meeting Type</label>
           <select 
             className="form-select"
-            value={category}
-            onChange={(e) => setCategory(e.target.value as any)}
+            value={meetingType}
+            onChange={(e) => setMeetingType(e.target.value)}
           >
-            <option>Competitor Intelligence</option>
-            <option>Consumer Trends</option>
-            <option>Pricing Analysis</option>
-            <option>Inventory & Supply</option>
-            <option>Promotional Tracking</option>
+            <option>Physical</option>
+            <option>Virtual</option>
+            <option>Telephonic</option>
           </select>
         </div>
 
-        {/* Metrics Sub-Grid (Full Width) */}
-        <div className="form-group full-width" style={{ borderBottom: '1px solid var(--border-muted)', paddingBottom: '16px', marginBottom: '8px' }}>
-          <label className="form-label" style={{ color: 'var(--primary)', fontWeight: '700' }}>Market Metrics Telemetry Data</label>
-          <div className="metrics-block-grid" style={{ marginTop: '8px' }}>
-            
-            {/* Foot Traffic */}
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.75rem' }}>Foot Traffic Density</label>
-              <select 
-                className="form-select"
-                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                value={footTraffic}
-                onChange={(e) => setFootTraffic(e.target.value as any)}
-              >
-                <option>Low</option>
-                <option>Medium</option>
-                <option>High</option>
-              </select>
-            </div>
-
-            {/* Sales Volume */}
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.75rem' }}>Est. Daily Sales (USD)</label>
-              <input 
-                type="number"
-                className="form-input"
-                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                value={salesVolume}
-                onChange={(e) => setSalesVolume(e.target.value)}
-                min="0"
-              />
-            </div>
-
-            {/* Competitor Index */}
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.75rem' }}>Competitor Price Index</label>
-              <input 
-                type="number"
-                className="form-input"
-                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                value={competitorPricingIndex}
-                onChange={(e) => setCompetitorPricingIndex(e.target.value)}
-                min="0"
-                max="250"
-              />
-            </div>
-
-            {/* Customer Satisfaction */}
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.75rem' }}>CSAT Rating Score</label>
-              <select 
-                className="form-select"
-                style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                value={customerSatisfaction}
-                onChange={(e) => setCustomerSatisfaction(e.target.value)}
-              >
-                <option value="1">★ 1 - Poor</option>
-                <option value="2">★ 2 - Average</option>
-                <option value="3">★ 3 - Good</option>
-                <option value="4">★ 4 - Very Good</option>
-                <option value="5">★ 5 - Exceptional</option>
-              </select>
-            </div>
-
-          </div>
-        </div>
-
-        {/* Observations */}
-        <div className="form-group full-width">
-          <label className="form-label">Core Observations</label>
-          <textarea 
-            className="form-textarea"
-            placeholder="Record detailed observations of store layouts, marketing behaviors, foot traffic reactions, and general field dynamics..."
-            value={observations}
-            onChange={(e) => setObservations(e.target.value)}
+        <div className="form-group">
+          <label className="form-label">Date and Time</label>
+          <input 
+            type="datetime-local"
+            className="form-input"
+            value={dateTime}
+            onChange={(e) => setDateTime(e.target.value)}
             required
           />
         </div>
 
-        {/* Issues Found */}
-        <div className="form-group full-width">
-          <label className="form-label">Issues & Bottlenecks Identified (Optional)</label>
-          <textarea 
-            className="form-textarea"
-            placeholder="Describe any supply gaps, logistics failures, local complaints, stockouts, or competitive pricing threats..."
-            value={issuesFound}
-            onChange={(e) => setIssuesFound(e.target.value)}
-          />
-        </div>
-
-        {/* Recommendations */}
-        <div className="form-group full-width">
-          <label className="form-label">Strategic / Operational Recommendations</label>
-          <textarea 
-            className="form-textarea"
-            placeholder="Provide actionable suggestions to resolve issues, optimize margins, increase shelf visibility, or counter competitor discounts..."
-            value={recommendations}
-            onChange={(e) => setRecommendations(e.target.value)}
+        <div className="form-group">
+          <label className="form-label">Location / City</label>
+          <input 
+            type="text"
+            className="form-input"
+            placeholder="e.g. Chicago, IL"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
             required
           />
         </div>
 
-        {/* File Attachments Zone */}
-        <div className="form-group full-width">
-          <label className="form-label">Upload Intelligence Assets & Documents</label>
-          <div 
-            className="file-upload-zone"
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
+        <div className="form-group">
+          <label className="form-label">Report Status</label>
+          <select 
+            className="form-select"
+            value={reportStatus}
+            onChange={(e) => setReportStatus(e.target.value as 'Draft' | 'Pending')}
           >
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-            />
-            <div className="upload-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="17 8 12 3 7 8" />
-                <line x1="12" y1="3" x2="12" y2="15" />
-              </svg>
-            </div>
-            <div className="upload-text">Drag & Drop file here, or click to browse</div>
-            <div className="upload-sub">Accepts CSV, XLSX, PDF, TXT or PNG files (Max 10MB)</div>
-          </div>
+            <option value="Draft">Draft</option>
+            <option value="Pending">Pending</option>
+          </select>
+        </div>
 
-          {/* Upload Progress Loader bar */}
-          {isUploading && (
-            <div style={{ marginTop: '12px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '4px' }}>
-                <span>Simulating file telemetry packaging...</span>
-                <span>{uploadProgress}%</span>
-              </div>
-              <div style={{ height: '4px', backgroundColor: 'var(--bg-sidebar)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${uploadProgress}%`, backgroundColor: 'var(--primary)', transition: 'width 0.1s ease' }} />
-              </div>
-            </div>
-          )}
+      </div>
 
-          {/* Uploaded Files Display List */}
-          {attachments.length > 0 && (
-            <div className="attachments-list" style={{ marginTop: '16px' }}>
-              {attachments.map((att) => (
-                <div className="attachment-item" key={att.id}>
-                  <div className="attachment-meta">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2">
-                      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                      <polyline points="22 4 12 14.01 9 11.01" />
-                    </svg>
-                    <span className="attachment-name" style={{ color: 'var(--primary)' }}>{att.name}</span>
-                    <span className="attachment-size">({att.size})</span>
-                  </div>
-                  <button 
-                    type="button" 
-                    className="btn btn-danger btn-sm"
-                    onClick={() => handleRemoveAttachment(att.id)}
-                    style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                  >
-                    Delete
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+      {/* Section 2: Institution personnel info */}
+      <h3 style={{ color: 'var(--primary)', marginBottom: '16px', borderBottom: '1px solid var(--border-muted)', paddingBottom: '8px', fontSize: '1.1rem' }}>
+        2. Institution / Hospital Details
+      </h3>
+      <div className="form-grid" style={{ marginBottom: '32px' }}>
+        
+        <div className="form-group" style={{ gridColumn: 'span 2' }}>
+          <label className="form-label">Institution / Hospital Name</label>
+          <input 
+            type="text"
+            className="form-input"
+            placeholder="Enter full legal name of hospital or clinic"
+            value={institutionName}
+            onChange={(e) => setInstitutionName(e.target.value)}
+            required
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Head of Institution</label>
+          <input 
+            type="text"
+            className="form-input"
+            placeholder="e.g. Dean or Chief Medical Officer"
+            value={headOfInstitution}
+            onChange={(e) => setHeadOfInstitution(e.target.value)}
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Contact Number (Head)</label>
+          <input 
+            type="text"
+            className="form-input"
+            placeholder="e.g. +1 555-0100"
+            value={contactNumber}
+            onChange={(e) => setContactNumber(e.target.value)}
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Number of Final Year Students</label>
+          <input 
+            type="number"
+            className="form-input"
+            value={finalYearStudentsCount}
+            onChange={(e) => setFinalYearStudentsCount(e.target.value)}
+            min="0"
+          />
+        </div>
+
+      </div>
+
+      {/* Section 3: SPOC details */}
+      <h3 style={{ color: 'var(--primary)', marginBottom: '16px', borderBottom: '1px solid var(--border-muted)', paddingBottom: '8px', fontSize: '1.1rem' }}>
+        3. Single Point of Contact (SPOC)
+      </h3>
+      <div className="form-grid" style={{ marginBottom: '32px' }}>
+        
+        <div className="form-group">
+          <label className="form-label">SPOC Name</label>
+          <input 
+            type="text"
+            className="form-input"
+            placeholder="Full Name of SPOC coordinate"
+            value={spocName}
+            onChange={(e) => setSpocName(e.target.value)}
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">SPOC Contact Number</label>
+          <input 
+            type="text"
+            className="form-input"
+            placeholder="SPOC direct mobile/desk phone"
+            value={spocContact}
+            onChange={(e) => setSpocContact(e.target.value)}
+          />
+        </div>
+
+        <div className="form-group" style={{ gridColumn: 'span 2' }}>
+          <label className="form-label">SPOC Email Address</label>
+          <input 
+            type="email"
+            className="form-input"
+            placeholder="spoc@institution.edu"
+            value={spocEmail}
+            onChange={(e) => setSpocEmail(e.target.value)}
+          />
+        </div>
+
+      </div>
+
+      {/* Section 4: Notes and observations */}
+      <h3 style={{ color: 'var(--primary)', marginBottom: '16px', borderBottom: '1px solid var(--border-muted)', paddingBottom: '8px', fontSize: '1.1rem' }}>
+        4. Field Notes & Observations
+      </h3>
+      <div className="form-grid" style={{ marginBottom: '24px' }}>
+        
+        <div className="form-group" style={{ gridColumn: 'span 2' }}>
+          <label className="form-label">Notes / Observations</label>
+          <textarea 
+            className="form-textarea"
+            placeholder="Outline student reactions, queries, bottlenecks, action items, or clinic schedules..."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            style={{ minHeight: '120px' }}
+          />
         </div>
 
       </div>
@@ -325,19 +343,48 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
         style={{ 
           display: 'flex', 
           justifyContent: 'flex-end', 
+          alignItems: 'center',
           gap: '12px', 
           marginTop: '32px',
           borderTop: '1px solid var(--border-muted)',
           paddingTop: '20px'
         }}
       >
-        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+        <button 
+          type="button" 
+          className="btn btn-secondary" 
+          onClick={handleClear}
+          style={{ marginRight: 'auto', border: '1px solid var(--border-muted)' }}
+        >
+          Clear Form
+        </button>
+
+        <button 
+          type="button" 
+          className="btn btn-secondary" 
+          onClick={onCancel}
+          style={{ border: '1px solid var(--border-muted)' }}
+        >
           Cancel
         </button>
-        <button type="submit" className="btn btn-primary">
-          Submit Report For Review
+
+        <button 
+          type="button" 
+          className="btn" 
+          onClick={handleSaveDraft}
+          style={{ backgroundColor: 'transparent', border: '1px solid var(--primary)', color: 'var(--primary)' }}
+        >
+          Save Draft
+        </button>
+
+        <button 
+          type="submit" 
+          className="btn btn-primary"
+        >
+          Submit Report
         </button>
       </div>
+
     </form>
   );
 };

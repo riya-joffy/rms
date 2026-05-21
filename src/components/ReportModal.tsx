@@ -17,6 +17,9 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
 
   if (!report || !currentUser) return null;
 
+  const isAuthorized = currentUser.role === 'admin' || report.staffId === currentUser.id;
+  if (!isAuthorized) return null;
+
   const handleReview = async (status: 'Approved' | 'Rejected') => {
     if (!feedbackInput.trim() && status === 'Rejected') {
       alert('Please provide feedback comments explaining the rejection reasons.');
@@ -62,9 +65,9 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
         <div className="modal-body">
           <div className="report-detail-grid">
             
-            {/* Meta Details Row 1 */}
+            {/* Row 1: Submitter Info */}
             <div className="report-detail-item">
-              <span className="report-detail-label">Staff Analyst</span>
+              <span className="report-detail-label">Staff User</span>
               <div className="report-detail-val">{report.staffName} ({report.staffId})</div>
             </div>
             <div className="report-detail-item">
@@ -72,133 +75,109 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
               <div className="report-detail-val">{report.department}</div>
             </div>
 
-            {/* Meta Details Row 2 */}
+            {/* Row 2: Basic Activity details */}
             <div className="report-detail-item">
-              <span className="report-detail-label">Region / Market Hub</span>
-              <div className="report-detail-val">{report.region}</div>
-            </div>
-            <div className="report-detail-item">
-              <span className="report-detail-label">Date & Time Created</span>
-              <div className="report-detail-val">
-                {report.date} @ {report.time}
-              </div>
-            </div>
-
-            {/* Report Category */}
-            <div className="report-detail-item" style={{ gridColumn: 'span 2' }}>
-              <span className="report-detail-label">Intelligence Category</span>
+              <span className="report-detail-label">Activity & Meeting Type</span>
               <div className="report-detail-val" style={{ fontWeight: '600', color: 'var(--primary)' }}>
-                {report.category}
+                {report.activityType} ({report.meetingType})
+              </div>
+            </div>
+            <div className="report-detail-item">
+              <span className="report-detail-label">Scheduled Date & Time</span>
+              <div className="report-detail-val">
+                {report.dateTime ? new Date(report.dateTime).toLocaleString() : `${report.date} @ ${report.time}`}
               </div>
             </div>
 
-            {/* Market Metrics / Data Telemetry Section */}
-            <div className="report-detail-block">
-              <span className="report-detail-label">Market Metrics Telemetry</span>
-              <div className="metrics-block-grid">
+            {/* Row 3: Institution details */}
+            <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
+              <span className="report-detail-label">Institution Details</span>
+              <div className="metrics-block-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
                 <div className="metric-mini-card">
-                  <div className="metric-mini-label">Foot Traffic</div>
-                  <div className="metric-mini-val">{report.metrics.footTraffic}</div>
+                  <div className="metric-mini-label">Name</div>
+                  <div className="metric-mini-val" style={{ fontSize: '0.95rem' }}>{report.institutionName}</div>
                 </div>
                 <div className="metric-mini-card">
-                  <div className="metric-mini-label">Sales Volume</div>
-                  <div className="metric-mini-val" style={{ fontFamily: 'var(--font-mono)' }}>
-                    ${report.metrics.salesVolume.toLocaleString()}
-                  </div>
+                  <div className="metric-mini-label">Location / City</div>
+                  <div className="metric-mini-val">{report.location}</div>
                 </div>
                 <div className="metric-mini-card">
-                  <div className="metric-mini-label">Competitor Index</div>
-                  <div className="metric-mini-val">{report.metrics.competitorPricingIndex}</div>
+                  <div className="metric-mini-label">Final Year Students</div>
+                  <div className="metric-mini-val" style={{ fontFamily: 'var(--font-mono)' }}>{report.finalYearStudentsCount}</div>
                 </div>
                 <div className="metric-mini-card">
-                  <div className="metric-mini-label">CSAT Rating</div>
-                  <div className="metric-mini-val">★ {report.metrics.customerSatisfaction} / 5</div>
+                  <div className="metric-mini-label">Head of Institution</div>
+                  <div className="metric-mini-val">{report.headOfInstitution || 'N/A'}</div>
+                </div>
+                <div className="metric-mini-card">
+                  <div className="metric-mini-label">Head Contact</div>
+                  <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.contactNumber || 'N/A'}</div>
                 </div>
               </div>
             </div>
 
-            {/* Detailed Observations */}
-            <div className="report-detail-block">
-              <span className="report-detail-label">Market Observations</span>
-              <div className="report-detail-block-content">{report.observations}</div>
-            </div>
-
-            {/* Issues Found */}
-            <div className="report-detail-block">
-              <span className="report-detail-label">Identified Operational Obstacles / Issues</span>
-              <div className="report-detail-block-content" style={{ borderLeft: '3px solid var(--error)' }}>
-                {report.issuesFound || 'No major issues flagged.'}
+            {/* Row 4: SPOC details */}
+            <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
+              <span className="report-detail-label">Single Point of Contact (SPOC)</span>
+              <div className="metrics-block-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                <div className="metric-mini-card">
+                  <div className="metric-mini-label">SPOC Name</div>
+                  <div className="metric-mini-val">{report.spocName || 'N/A'}</div>
+                </div>
+                <div className="metric-mini-card">
+                  <div className="metric-mini-label">SPOC Contact</div>
+                  <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.spocContact || 'N/A'}</div>
+                </div>
+                <div className="metric-mini-card">
+                  <div className="metric-mini-label">SPOC Email</div>
+                  <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.spocEmail || 'N/A'}</div>
+                </div>
               </div>
             </div>
 
-            {/* Recommendations */}
-            <div className="report-detail-block">
-              <span className="report-detail-label">Strategic Recommendations</span>
-              <div className="report-detail-block-content" style={{ borderLeft: '3px solid var(--success)' }}>
-                {report.recommendations}
+            {/* Row 5: Notes & Observations */}
+            <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
+              <span className="report-detail-label">Notes & Observations</span>
+              <div className="report-detail-block-content" style={{ borderLeft: '3px solid var(--primary)' }}>
+                {report.notes || 'No notes compiled.'}
               </div>
             </div>
 
-            {/* Attachments Section */}
-            <div className="report-detail-block">
-              <span className="report-detail-label">Attachments & Telemetry Assets ({report.attachments.length})</span>
-              {report.attachments.length > 0 ? (
-                <div className="attachments-list">
-                  {report.attachments.map((att) => (
-                    <div className="attachment-item" key={att.id}>
-                      <div className="attachment-meta">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="2">
-                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-                        </svg>
-                        <span className="attachment-name">{att.name}</span>
-                        <span className="attachment-size">({att.size})</span>
+            {/* Timeline - Admin Only */}
+            {currentUser.role === 'admin' && (
+              <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
+                <span className="report-detail-label">Timeline Tracking</span>
+                <div className="activity-list" style={{ marginTop: '8px', backgroundColor: 'var(--bg-sidebar)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-muted)' }}>
+                  {report.history.map((h) => (
+                    <div className="activity-item" key={h.id}>
+                      <div className={`activity-dot ${h.status === 'Approved' ? 'success' : h.status === 'Rejected' ? 'error' : h.status === 'Draft' ? 'warning' : ''}`} />
+                      <div className="activity-details">
+                        <div className="activity-text">
+                          Status changed to <strong>{h.status}</strong> by <strong>{h.user}</strong>
+                        </div>
+                        {h.comment && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', fontStyle: 'italic' }}>"{h.comment}"</div>}
+                        <span className="activity-time">{new Date(h.date).toLocaleString()}</span>
                       </div>
-                      <a href="#" className="btn btn-secondary btn-sm" onClick={(e) => e.preventDefault()}>
-                        Download
-                      </a>
                     </div>
                   ))}
                 </div>
-              ) : (
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic', marginTop: '4px' }}>
-                  No files attached.
-                </div>
-              )}
-            </div>
-
-            {/* Audit Chronology Log / History */}
-            <div className="report-detail-block">
-              <span className="report-detail-label">Submission Chronology</span>
-              <div className="activity-list" style={{ marginTop: '8px', backgroundColor: 'var(--bg-sidebar)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-muted)' }}>
-                {report.history.map((h) => (
-                  <div className="activity-item" key={h.id}>
-                    <div className={`activity-dot ${h.status === 'Approved' ? 'success' : h.status === 'Rejected' ? 'error' : ''}`} />
-                    <div className="activity-details">
-                      <div className="activity-text">
-                        Status changed to <strong>{h.status}</strong> by <strong>{h.user}</strong>
-                      </div>
-                      {h.comment && <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px', fontStyle: 'italic' }}>"{h.comment}"</div>}
-                      <span className="activity-time">{new Date(h.date).toLocaleString()}</span>
-                    </div>
-                  </div>
-                ))}
               </div>
-            </div>
+            )}
 
-            {/* Admin Feedback Box (Admin-mode: editable; Staff-mode: viewable) */}
+            {/* Review feedback */}
             {currentUser.role === 'admin' && report.status === 'Pending' ? (
-              <div className="report-detail-block admin-feedback-box">
-                <span className="report-detail-label">Executive Review Decision Feedback</span>
+              <div className="report-detail-block admin-feedback-box" style={{ gridColumn: 'span 2' }}>
+                <span className="report-detail-label">Review Feedback Comments</span>
                 <textarea
                   className="feedback-area"
-                  placeholder="Provide brief notes, directives, or reasoning behind the approval/rejection decision..."
+                  placeholder="Enter comments explaining approval decision or rejection reasons..."
                   value={feedbackInput}
                   onChange={(e) => setFeedbackInput(e.target.value)}
                 />
               </div>
             ) : report.feedback ? (
-              <div className="report-detail-block admin-feedback-box">
-                <span className="report-detail-label" style={{ color: 'var(--primary)' }}>Executive Review Feedback Notes</span>
+              <div className="report-detail-block admin-feedback-box" style={{ gridColumn: 'span 2' }}>
+                <span className="report-detail-label" style={{ color: 'var(--primary)' }}>Review Notes & Comments</span>
                 <div 
                   className="report-detail-block-content" 
                   style={{ 
@@ -229,14 +208,14 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
                 onClick={() => handleReview('Rejected')}
                 disabled={isSubmitting}
               >
-                Reject & Send Feedback
+                Reject
               </button>
               <button 
                 className="btn btn-primary" 
                 onClick={() => handleReview('Approved')}
                 disabled={isSubmitting}
               >
-                Approve Submission
+                Approve
               </button>
             </>
           )}

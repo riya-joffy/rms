@@ -6,7 +6,6 @@ import { useReports } from '../../context/ReportContext';
 import { useRouter } from 'next/navigation';
 import { Sidebar } from '../../components/Sidebar';
 import { Navbar } from '../../components/Navbar';
-import { SVGCharts } from '../../components/SVGCharts';
 import { ReportModal } from '../../components/ReportModal';
 import { CreateReportForm } from '../../components/CreateReportForm';
 import { MarketReport } from '../../types';
@@ -16,19 +15,18 @@ export default function DashboardPage() {
   const { reports, logs, notifications, stats, loading: reportsLoading, markNotifAsRead, markAllNotifsAsRead } = useReports();
   const router = useRouter();
 
-  // Tab State: 'dashboard' | 'reports' | 'staff' | 'notifications' | 'settings'
+  // Tab State: 'dashboard' | 'reports' | 'staff' | 'notifications' | 'settings' | 'create-report'
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Search & Filter States for Report Table
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
-  const [categoryFilter, setCategoryFilter] = useState('All');
   const [regionFilter, setRegionFilter] = useState('All');
 
-  // Modal States
+  // Modal & Edit States
   const [selectedReport, setSelectedReport] = useState<MarketReport | null>(null);
-  const [createFormOpen, setCreateFormOpen] = useState(false);
+  const [reportToEdit, setReportToEdit] = useState<MarketReport | null>(null);
 
   // Verification redirect
   useEffect(() => {
@@ -36,6 +34,17 @@ export default function DashboardPage() {
       router.push('/login');
     }
   }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    console.log('ROLE:', user.role);
+    console.log('ACTIVE TAB:', activeTab);
+
+    if (user.role === 'staff' && !['dashboard', 'create-report', 'notifications', 'settings'].includes(activeTab)) {
+      setActiveTab('dashboard');
+    }
+  }, [activeTab, setActiveTab, user]);
 
   if (authLoading || !user) {
     return (
@@ -69,15 +78,13 @@ export default function DashboardPage() {
     const matchSearch = 
       rep.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rep.staffName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rep.region.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rep.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rep.observations.toLowerCase().includes(searchTerm.toLowerCase());
+      (rep.region || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (rep.observations || '').toLowerCase().includes(searchTerm.toLowerCase());
 
     const matchStatus = statusFilter === 'All' || rep.status === statusFilter;
-    const matchCategory = categoryFilter === 'All' || rep.category === categoryFilter;
-    const matchRegion = regionFilter === 'All' || rep.region === regionFilter;
+    const matchRegion = regionFilter === 'All' || (rep.region || '') === regionFilter;
 
-    return matchSearch && matchStatus && matchCategory && matchRegion;
+    return matchSearch && matchStatus && matchRegion;
   });
 
   const getStatusBadgeClass = (status: string) => {
@@ -89,12 +96,14 @@ export default function DashboardPage() {
   };
 
   const handleInspectReport = (report: MarketReport) => {
-    setSelectedReport(report);
+    if (user.role === 'admin' || report.staffId === user.id) {
+      setSelectedReport(report);
+    }
   };
 
   const handleInspectReportById = (id: string) => {
     const rep = reports.find(r => r.id === id);
-    if (rep) {
+    if (rep && (user.role === 'admin' || rep.staffId === user.id)) {
       setSelectedReport(rep);
     }
   };
@@ -129,206 +138,296 @@ export default function DashboardPage() {
               ======================================================== */}
           {activeTab === 'dashboard' && (
             <>
-              {/* Telemetry Stats Cards Grid */}
-              <section className="stats-grid">
-                
-                {/* Stat 1 */}
-                <div className="stat-card">
-                  <div className="stat-header">
-                    <span className="stat-title">Total Submissions</span>
-                    <div className="stat-icon-box purple">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                        <polyline points="14 2 14 8 20 8" />
-                      </svg>
+              {user.role === 'staff' ? (
+                <>
+                  {/* Staff Telemetry Stats Cards Grid */}
+                  <section className="stats-grid">
+                    {/* Stat 1 */}
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-title">Submitted Reports</span>
+                        <div className="stat-icon-box purple">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="stat-value">
+                        {reports.filter(r => r.staffId === user.id && r.status !== 'Draft').length}
+                      </div>
+                      <div className="stat-footer">
+                        <span>Active submissions</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="stat-value">{stats.totalReports}</div>
-                  <div className="stat-footer">
-                    <span className="trend-badge up">↑ {stats.monthlyGrowthRate}%</span>
-                    <span>vs past 30 days</span>
-                  </div>
-                </div>
 
-                {/* Stat 2 */}
-                <div className="stat-card">
-                  <div className="stat-header">
-                    <span className="stat-title">Pending Audits</span>
-                    <div className="stat-icon-box orange">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                      </svg>
+                    {/* Stat 2 */}
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-title">Saved Drafts</span>
+                        <div className="stat-icon-box orange">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="stat-value" style={{ color: 'var(--warning)' }}>
+                        {reports.filter(r => r.staffId === user.id && r.status === 'Draft').length}
+                      </div>
+                      <div className="stat-footer">
+                        <span>Awaiting completion</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="stat-value" style={{ color: stats.pendingReports > 0 ? 'var(--warning)' : 'inherit' }}>
-                    {stats.pendingReports}
-                  </div>
-                  <div className="stat-footer">
-                    <span>Awaiting reviews</span>
-                  </div>
-                </div>
 
-                {/* Stat 3 */}
-                <div className="stat-card">
-                  <div className="stat-header">
-                    <span className="stat-title">Approved Decisions</span>
-                    <div className="stat-icon-box green">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
+                    {/* Stat 3 */}
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-title">Approved Reports</span>
+                        <div className="stat-icon-box green">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="stat-value">
+                        {reports.filter(r => r.staffId === user.id && r.status === 'Approved').length}
+                      </div>
+                      <div className="stat-footer">
+                        <span>Verified outcomes</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="stat-value">{stats.approvedReports}</div>
-                  <div className="stat-footer">
-                    <span className="trend-badge up">
-                      {stats.totalReports > 0 ? Math.round((stats.approvedReports / stats.totalReports) * 100) : 100}% Approved
-                    </span>
-                  </div>
-                </div>
 
-                {/* Stat 4 */}
-                <div className="stat-card">
-                  <div className="stat-header">
-                    <span className="stat-title">Average CSAT Rating</span>
-                    <div className="stat-icon-box blue">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                      </svg>
+                    {/* Stat 4 */}
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-title">Feedback / Rejections</span>
+                        <div className="stat-icon-box red" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'rgb(239, 68, 68)' }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="stat-value" style={{ color: 'rgb(239, 68, 68)' }}>
+                        {reports.filter(r => r.staffId === user.id && r.status === 'Rejected').length}
+                      </div>
+                      <div className="stat-footer">
+                        <span>Requires attention</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="stat-value">{stats.averageSatisfaction} <span style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>/ 5</span></div>
-                  <div className="stat-footer">
-                    <span>Customer experience index</span>
-                  </div>
-                </div>
+                  </section>
 
-              </section>
-
-              {/* Vector SVG Charts */}
-              <SVGCharts />
-
-              {/* Dashboard Layout Row: Quick Staff Buttons (for staff) + System Audit Logs (both) */}
-              <div className="analytics-section">
-                
-                {/* Left panel: Quick Actions or Short table */}
-                <div className="chart-card" style={{ gap: '16px' }}>
-                  <div className="chart-card-header" style={{ marginBottom: 0 }}>
-                    <div className="chart-card-title">
-                      <h3>Analyst Actions Quick Access</h3>
-                      <p>Jump to core actions or pending submissions</p>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {user.role === 'staff' ? (
-                      <>
+                  {/* My Submissions & Drafts Tracker */}
+                  <div className="table-card" style={{ marginTop: '24px' }}>
+                    <div className="table-header-bar">
+                      <div className="table-title">My Submissions & Drafts Tracker</div>
+                      <div className="filters-row">
                         <button 
                           className="btn btn-primary"
-                          onClick={() => setCreateFormOpen(true)}
-                          style={{ width: '100%', justifyContent: 'center' }}
+                          onClick={() => { setReportToEdit(null); setActiveTab('create-report'); }}
                         >
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <line x1="12" y1="5" x2="12" y2="19" />
                             <line x1="5" y1="12" x2="19" y2="12" />
                           </svg>
-                          Compile New Market Report
+                          Create New Report
                         </button>
-                        <button 
-                          className="btn btn-secondary"
-                          onClick={() => { setActiveTab('reports'); setStatusFilter('Pending'); }}
-                          style={{ width: '100%', justifyContent: 'center' }}
-                        >
-                          Review My Submitted Reports
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button 
-                          className="btn btn-primary"
-                          onClick={() => { setActiveTab('reports'); setStatusFilter('Pending'); }}
-                          style={{ width: '100%', justifyContent: 'center' }}
-                        >
-                          Inspect Pending Audits ({stats.pendingReports})
-                        </button>
-                        <button 
-                          className="btn btn-secondary"
-                          onClick={() => setActiveTab('staff')}
-                          style={{ width: '100%', justifyContent: 'center' }}
-                        >
-                          Configure Staff Permission Policies
-                        </button>
-                      </>
-                    )}
-                  </div>
+                      </div>
+                    </div>
 
-                  {/* Short pending items list */}
-                  <div style={{ marginTop: '16px' }}>
-                    <h4 style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px' }}>
-                      Recent Localized Activity Feed
-                    </h4>
-                    <div className="activity-list">
-                      {reports.slice(0, 3).map(r => (
-                        <div 
-                          key={r.id} 
-                          style={{ 
-                            display: 'flex', 
-                            justifyContent: 'space-between', 
-                            padding: '10px', 
-                            backgroundColor: 'var(--bg-sidebar)',
-                            borderRadius: 'var(--radius-sm)',
-                            border: '1px solid var(--border-muted)',
-                            cursor: 'pointer'
-                          }}
-                          onClick={() => handleInspectReport(r)}
-                        >
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontSize: '0.85rem', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>{r.id}</span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>By {r.staffName} ({r.region})</span>
-                          </div>
-                          <span className={getStatusBadgeClass(r.status)} style={{ height: 'fit-content' }}>{r.status}</span>
+                    <div className="data-table-container">
+                      {reports.filter(r => r.staffId === user.id).length > 0 ? (
+                        <table className="data-table">
+                          <thead>
+                            <tr>
+                              <th>Report ID</th>
+                              <th>Institution / Hospital</th>
+                              <th>Location</th>
+                              <th>Activity Type</th>
+                              <th>Submitted Date</th>
+                              <th>Status</th>
+                              <th style={{ textAlign: 'right' }}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reports
+                              .filter(r => r.staffId === user.id)
+                              .map((rep) => (
+                                <tr key={rep.id}>
+                                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: '700' }}>{rep.id}</td>
+                                  <td style={{ fontWeight: '600' }}>{rep.institutionName}</td>
+                                  <td>{rep.location}</td>
+                                  <td>{rep.activityType} ({rep.meetingType})</td>
+                                  <td>{rep.date} @ {rep.time}</td>
+                                  <td>
+                                    <span className={
+                                      rep.status === 'Approved' ? 'badge approved' : 
+                                      rep.status === 'Rejected' ? 'badge rejected' : 
+                                      rep.status === 'Draft' ? 'badge pending' : 'badge pending'
+                                    } style={{ 
+                                      backgroundColor: rep.status === 'Draft' ? 'rgba(245, 158, 11, 0.1)' : undefined,
+                                      color: rep.status === 'Draft' ? 'var(--warning)' : undefined
+                                    }}>
+                                      {rep.status}
+                                    </span>
+                                  </td>
+                                  <td style={{ textAlign: 'right' }}>
+                                    {rep.status === 'Draft' ? (
+                                      <button 
+                                        className="btn btn-primary btn-sm"
+                                        onClick={() => {
+                                          setReportToEdit(rep);
+                                          setActiveTab('create-report');
+                                        }}
+                                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                      >
+                                        Edit Draft
+                                      </button>
+                                    ) : (
+                                      <button 
+                                        className="btn btn-secondary btn-sm"
+                                        onClick={() => handleInspectReport(rep)}
+                                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                      >
+                                        Inspect Details
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <div style={{ padding: '64px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: '16px' }}>
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                          </svg>
+                          <h4>No institutional reports recorded yet</h4>
+                          <p style={{ fontSize: '0.85rem', marginTop: '4px' }}>Click "Create New Report" to start documenting your visits and field activity.</p>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
-                </div>
-
-                {/* Right panel: System Audit logs feed */}
-                <div className="chart-card">
-                  <div className="chart-card-header">
-                    <div className="chart-card-title">
-                      <h3>System Audit & submissions log</h3>
-                      <p>Immutable operational chronology tracker</p>
-                    </div>
-                  </div>
-
-                  <div className="activity-list" style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '8px' }}>
-                    {logs.slice(0, 8).map(log => (
-                      <div className="activity-item" key={log.id}>
-                        <div className={`activity-dot ${
-                          log.action.includes('Approved') || log.action.includes('Active') ? 'success' :
-                          log.action.includes('Rejected') || log.action.includes('Suspended') ? 'error' : 
-                          log.action.includes('Logged In') ? 'warning' : ''
-                        }`} />
-                        <div className="activity-details">
-                          <span className="activity-text">
-                            <strong>{log.userName}</strong> ({log.userRole}): {log.details}
-                          </span>
-                          <span className="activity-time">{new Date(log.timestamp).toLocaleString()}</span>
+                </>
+              ) : (
+                <>
+                  {/* Admin Telemetry Stats Cards Grid */}
+                  <section className="stats-grid">
+                    {/* Stat 1 */}
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-title">Total Submissions</span>
+                        <div className="stat-icon-box purple">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                          </svg>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <div className="stat-value">{stats.totalReports}</div>
+                      <div className="stat-footer">
+                        <span className="trend-badge up">↑ {stats.monthlyGrowthRate}%</span>
+                        <span>vs past 30 days</span>
+                      </div>
+                    </div>
 
-              </div>
+                    {/* Stat 2 */}
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-title">Pending Audits</span>
+                        <div className="stat-icon-box orange">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="stat-value" style={{ color: stats.pendingReports > 0 ? 'var(--warning)' : 'inherit' }}>
+                        {stats.pendingReports}
+                      </div>
+                      <div className="stat-footer">
+                        <span>Awaiting reviews</span>
+                      </div>
+                    </div>
+
+                    {/* Stat 3 */}
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-title">Approved Decisions</span>
+                        <div className="stat-icon-box green">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="stat-value">{stats.approvedReports}</div>
+                      <div className="stat-footer">
+                        <span className="trend-badge up">
+                          {stats.totalReports > 0 ? Math.round((stats.approvedReports / stats.totalReports) * 100) : 100}% Approved
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Stat 4 */}
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-title">Audited Rejections</span>
+                        <div className="stat-icon-box blue" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'rgb(239, 68, 68)' }}>
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div className="stat-value" style={{ color: 'rgb(239, 68, 68)' }}>
+                        {reports.filter(r => r.status === 'Rejected').length}
+                      </div>
+                      <div className="stat-footer">
+                        <span>Awaiting staff edits</span>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Dashboard Layout Row: Admin audit feed */}
+                  <div className="analytics-section">
+                    <div className="chart-card">
+                      <div className="chart-card-header">
+                        <div className="chart-card-title">
+                          <h3>System Audit & submissions log</h3>
+                          <p>Immutable operational chronology tracker</p>
+                        </div>
+                      </div>
+
+                      <div className="activity-list" style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '8px' }}>
+                        {logs.slice(0, 8).map(log => (
+                          <div className="activity-item" key={log.id}>
+                            <div className={`activity-dot ${
+                              log.action.includes('Approved') || log.action.includes('Active') ? 'success' :
+                              log.action.includes('Rejected') || log.action.includes('Suspended') ? 'error' : 
+                              log.action.includes('Logged In') ? 'warning' : ''
+                            }`} />
+                            <div className="activity-details">
+                              <span className="activity-text">
+                                <strong>{log.userName}</strong> ({log.userRole}): {log.details}
+                              </span>
+                              <span className="activity-time">{new Date(log.timestamp).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </>
           )}
 
           {/* ========================================================
               TAB B: REPORTS REGISTRY TABLE VIEW
               ======================================================== */}
-          {activeTab === 'reports' && (
+          {activeTab === 'reports' && user.role === 'admin' && (
             <div className="table-card">
               
               {/* Search & Scoping bar */}
@@ -364,20 +463,6 @@ export default function DashboardPage() {
                     <option value="Rejected">Rejected</option>
                   </select>
 
-                  {/* Category Scope selector */}
-                  <select 
-                    className="filter-select"
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                  >
-                    <option value="All">All Categories</option>
-                    <option value="Competitor Intelligence">Competitor Intelligence</option>
-                    <option value="Consumer Trends">Consumer Trends</option>
-                    <option value="Pricing Analysis">Pricing Analysis</option>
-                    <option value="Inventory & Supply">Inventory & Supply</option>
-                    <option value="Promotional Tracking">Promotional Tracking</option>
-                  </select>
-
                   {/* Region Scope selector */}
                   <select 
                     className="filter-select"
@@ -391,20 +476,6 @@ export default function DashboardPage() {
                     <option value="Latin America">Latin America</option>
                   </select>
 
-                  {/* New Report Trigger (Staff Mode) */}
-                  {user.role === 'staff' && (
-                    <button 
-                      className="btn btn-primary"
-                      onClick={() => setCreateFormOpen(true)}
-                    >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                      Create Report
-                    </button>
-                  )}
-
                 </div>
               </div>
 
@@ -416,7 +487,6 @@ export default function DashboardPage() {
                       <tr>
                         <th>Report ID</th>
                         <th>Region</th>
-                        <th>Category</th>
                         <th>Submitting Analyst</th>
                         <th>Submitted Date</th>
                         <th>Est. Volume</th>
@@ -429,7 +499,6 @@ export default function DashboardPage() {
                         <tr key={rep.id}>
                           <td style={{ fontFamily: 'var(--font-mono)', fontWeight: '700' }}>{rep.id}</td>
                           <td>{rep.region}</td>
-                          <td>{rep.category}</td>
                           <td>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                               <span style={{ fontWeight: '600' }}>{rep.staffName}</span>
@@ -671,6 +740,19 @@ export default function DashboardPage() {
             </div>
           )}
 
+          {/* ========================================================
+              TAB F: CREATE / EDIT REPORT FORM INLINE
+              ======================================================== */}
+          {activeTab === 'create-report' && (
+            <div className="table-card" style={{ padding: '0px', background: 'transparent', border: 'none' }}>
+              <CreateReportForm 
+                reportToEdit={reportToEdit}
+                onSuccess={() => { setReportToEdit(null); setActiveTab('dashboard'); }}
+                onCancel={() => { setReportToEdit(null); setActiveTab('dashboard'); }}
+              />
+            </div>
+          )}
+
         </main>
       </div>
 
@@ -687,28 +769,7 @@ export default function DashboardPage() {
         />
       )}
 
-      {/* B. Report Compilation Form Modal */}
-      {createFormOpen && (
-        <div className="modal-backdrop" onClick={() => setCreateFormOpen(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '840px' }}>
-            <div className="modal-header">
-              <span className="modal-title">Compile Market Intelligence Report</span>
-              <button className="modal-close-btn" onClick={() => setCreateFormOpen(false)} aria-label="Cancel Compilation">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-            <div className="modal-body">
-              <CreateReportForm 
-                onSuccess={() => { setCreateFormOpen(false); setActiveTab('reports'); }} 
-                onCancel={() => setCreateFormOpen(false)}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+
 
     </div>
   );

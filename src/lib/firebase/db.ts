@@ -26,116 +26,110 @@ const isFirebaseActive = (): boolean => {
 // 1. Initial Mock / Seed Data
 // ==========================================
 
+const ALLOWED_USER_EMAILS = ['riyajoffy1@gmail.com', 'zandrakanja@gmail.com'];
+
 const DEFAULT_USERS: User[] = [
   {
     id: 'A-101',
-    name: 'Eleanor Vance',
-    email: 'admin@rms.com',
+    name: 'Riya Joffy',
+    email: 'riyajoffy1@gmail.com',
     role: 'admin',
     department: 'Operations',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
     status: 'active',
-    lastActive: '2026-05-19T17:42:00Z',
+    lastActive: '2026-05-21T15:27:00Z',
   },
   {
     id: 'S-201',
-    name: 'Marcus Chen',
-    email: 'marcus@rms.com',
+    name: 'Zandra Kanja',
+    email: 'zandrakanja@gmail.com',
     role: 'staff',
     department: 'Market Analysis',
     region: 'North America',
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
     status: 'active',
-    lastActive: '2026-05-19T17:55:00Z',
-  },
-  {
-    id: 'S-202',
-    name: 'Sarah Jenkins',
-    email: 'sarah@rms.com',
-    role: 'staff',
-    department: 'Business Intelligence',
-    region: 'Europe',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
-    status: 'active',
-    lastActive: '2026-05-19T16:30:00Z',
-  },
-  {
-    id: 'S-203',
-    name: 'Elena Rostova',
-    email: 'elena@rms.com',
-    role: 'staff',
-    department: 'Retail Insights',
-    region: 'Asia Pacific',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-    status: 'suspended',
-    lastActive: '2026-05-15T09:15:00Z',
-  },
-  {
-    id: 'S-204',
-    name: 'David Kim',
-    email: 'david@rms.com',
-    role: 'staff',
-    department: 'Consumer Research',
-    region: 'Latin America',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-    status: 'active',
-    lastActive: '2026-05-19T11:20:00Z',
+    lastActive: '2026-05-21T15:30:00Z',
   }
 ];
 
 const DEFAULT_REPORTS: MarketReport[] = [
   {
     id: 'REP-2026-001',
-    date: '2026-05-18',
+    date: '2026-05-20',
     time: '14:30',
-    region: 'North America',
-    staffName: 'Marcus Chen',
+    staffName: 'Zandra Kanja',
     staffId: 'S-201',
     department: 'Market Analysis',
-    category: 'Competitor Intelligence',
-    observations: 'Major competitor "GlobalMart" launched a aggressive pricing campaign in the tri-state area. Offering buy-one-get-one 50% off on all organic food lines. Store footprints show a 15% increase in their average basket size over the weekend. Our local outlets have noticed a temporary dip in organic produce sales as a result.',
-    metrics: {
-      footTraffic: 'High',
-      salesVolume: 84500,
-      competitorPricingIndex: 88,
-      customerSatisfaction: 4.2
-    },
-    issuesFound: 'Our pricing response was delayed. Store managers lack autonomy to issue regional discounts, making it hard to match promotional spikes quickly.',
-    recommendations: 'Implement an automated regional matching program for organic groceries. Empower regional managers to adjust prices within a +/- 10% corridor to counter immediate localized campaigns.',
-    attachments: [
-      { id: 'att-1', name: 'competitor_flyer.pdf', size: '1.8 MB', type: 'application/pdf', url: '#' }
-    ],
     status: 'Approved',
-    feedback: 'Excellent observation. We have briefed the pricing committee on your regional manager suggestion and are piloting it in NY-03 next month.',
+    activityType: 'Hospital Visit',
+    meetingType: 'Physical',
+    institutionName: 'City General Hospital',
+    location: 'Boston, MA',
+    finalYearStudentsCount: 120,
+    headOfInstitution: 'Dr. Sarah Connor',
+    contactNumber: '+1 555-0199',
+    spocName: 'John Smith',
+    spocContact: '+1 555-0188',
+    spocEmail: 'jsmith@cityhospital.org',
+    notes: 'Conducted a physical walkthrough and presentation. Spoke to final year medical students. High level of interest in operational programs. Recommended immediate follow-up contract dispatch.',
+    dateTime: '2026-05-20T10:00',
+    feedback: 'Excellent work Zandra. Program dispatched and pilot schedule approved.',
+    attachments: [
+      { id: 'att-1', name: 'hospital_presentation.pdf', size: '2.4 MB', type: 'application/pdf', url: '#' }
+    ],
     history: [
-      { id: 'h-11', status: 'Pending', date: '2026-05-18T14:45:00Z', comment: 'Initial submission', user: 'Marcus Chen' },
-      { id: 'h-12', status: 'Approved', date: '2026-05-18T17:30:00Z', comment: 'Excellent analysis, regional matching approved for pilot.', user: 'Eleanor Vance' }
+      { id: 'h-11', status: 'Pending', date: '2026-05-20T14:45:00Z', comment: 'Submitted visit report.', user: 'Zandra Kanja' },
+      { id: 'h-12', status: 'Approved', date: '2026-05-20T17:30:00Z', comment: 'Approved, program dispatched.', user: 'Riya Joffy' }
     ]
   },
   {
     id: 'REP-2026-002',
-    date: '2026-05-19',
+    date: '2026-05-21',
     time: '09:15',
-    region: 'Europe',
-    staffName: 'Sarah Jenkins',
-    staffId: 'S-202',
-    department: 'Business Intelligence',
-    category: 'Consumer Trends',
-    observations: 'Post-holiday audits in UK and Germany flag a massive spike in eco-friendly and biodegradable personal care item demand. Zero-waste packaging products saw a 34% month-over-month increase. Customers are actively asking store staff about sustainable product sourcing and carbon footprint tracking.',
-    metrics: {
-      footTraffic: 'Medium',
-      salesVolume: 92000,
-      competitorPricingIndex: 105,
-      customerSatisfaction: 4.7
-    },
-    issuesFound: 'Suppliers for eco-certified items are currently bottlenecked in Europe. Several key SKUs are running below critical inventory levels (3-4 days remaining).',
-    recommendations: 'Onboard secondary supplier in Southern Europe immediately to address freight delays. Set up prominent "Green Corner" displays at entrance nodes.',
-    attachments: [
-      { id: 'att-3', name: 'euro_sustainability_survey.pdf', size: '3.1 MB', type: 'application/pdf', url: '#' }
-    ],
+    staffName: 'Zandra Kanja',
+    staffId: 'S-201',
+    department: 'Market Analysis',
     status: 'Pending',
+    activityType: 'Institution Visit',
+    meetingType: 'Virtual',
+    institutionName: 'State Medical University',
+    location: 'New York, NY',
+    finalYearStudentsCount: 250,
+    headOfInstitution: 'Dean Arthur Pendelton',
+    contactNumber: '+1 555-0211',
+    spocName: 'Elena Rostova',
+    spocContact: '+1 555-0212',
+    spocEmail: 'erostova@statemed.edu',
+    notes: 'Virtual seminar conducted on RMS procedures. Over 200 medical students attended and filled the feedback. Requesting onboarding details for final year candidates.',
+    dateTime: '2026-05-21T08:00',
+    attachments: [],
     history: [
-      { id: 'h-21', status: 'Pending', date: '2026-05-19T09:30:00Z', comment: 'Submitted for weekly review.', user: 'Sarah Jenkins' }
+      { id: 'h-21', status: 'Pending', date: '2026-05-21T09:30:00Z', comment: 'Submitted for university review.', user: 'Zandra Kanja' }
+    ]
+  },
+  {
+    id: 'REP-2026-003',
+    date: '2026-05-21',
+    time: '11:00',
+    staffName: 'Zandra Kanja',
+    staffId: 'S-201',
+    department: 'Market Analysis',
+    status: 'Draft',
+    activityType: 'SPOC Meeting',
+    meetingType: 'Telephonic',
+    institutionName: 'Grace Clinic Centre',
+    location: 'Chicago, IL',
+    finalYearStudentsCount: 45,
+    headOfInstitution: 'Dr. Gregory House',
+    contactNumber: '+1 555-0300',
+    spocName: 'James Wilson',
+    spocContact: '+1 555-0301',
+    spocEmail: 'jwilson@graceclinic.org',
+    notes: 'Brief telephone sync on student rotation slots. Draft saved. Plan to finalize physical visit details and numbers tomorrow.',
+    dateTime: '2026-05-22T14:00',
+    attachments: [],
+    history: [
+      { id: 'h-31', status: 'Draft', date: '2026-05-21T11:00:00Z', comment: 'Draft saved locally.', user: 'Zandra Kanja' }
     ]
   }
 ];
@@ -214,11 +208,16 @@ let liveNotificationsCache: Notification[] = [];
 export const dbService = {
   // --- USERS ---
   getUsers: (): User[] => {
+    const allowedFilter = (user: User) => ALLOWED_USER_EMAILS.includes(user.email.toLowerCase());
+
     if (!isFirebaseActive()) {
-      return getStorageItem(KEYS.USERS, DEFAULT_USERS);
+      const storedUsers = getStorageItem(KEYS.USERS, DEFAULT_USERS);
+      const filteredUsers = (storedUsers ?? DEFAULT_USERS).filter(allowedFilter);
+      return filteredUsers.length > 0 ? filteredUsers : DEFAULT_USERS;
     }
     // Return local cache when queries are active in context
-    return liveUsersCache.length > 0 ? liveUsersCache : DEFAULT_USERS;
+    const cachedUsers = liveUsersCache.length > 0 ? liveUsersCache : DEFAULT_USERS;
+    return cachedUsers.filter(allowedFilter);
   },
 
   updateUserStatus: (userId: string, status: 'active' | 'suspended', adminName: string): User[] => {
@@ -286,92 +285,158 @@ export const dbService = {
     return liveReportsCache.length > 0 ? liveReportsCache : DEFAULT_REPORTS;
   },
 
-  addReport: (reportData: Omit<MarketReport, 'id' | 'status' | 'history' | 'feedback'>, staffName: string): MarketReport => {
+  addReport: (
+    reportData: Omit<MarketReport, 'id' | 'history' | 'feedback'> & { id?: string; status?: 'Pending' | 'Draft' },
+    staffName: string
+  ): MarketReport => {
+    const isEdit = !!reportData.id;
+    const finalStatus = reportData.status || 'Pending';
+
     if (!isFirebaseActive()) {
       const reports = dbService.getReports();
-      const newId = `REP-2026-${String(reports.length + 1).padStart(3, '0')}`;
-      
-      const newReport: MarketReport = {
-        ...reportData,
-        id: newId,
-        status: 'Pending',
-        history: [
-          {
-            id: `h-${Date.now()}`,
-            status: 'Pending',
-            date: new Date().toISOString(),
-            comment: 'Report created and submitted for review.',
-            user: staffName
-          }
-        ]
-      };
+      let finalReport: MarketReport;
 
-      reports.unshift(newReport);
+      if (isEdit) {
+        const index = reports.findIndex(r => r.id === reportData.id);
+        if (index !== -1) {
+          const oldReport = reports[index];
+          finalReport = {
+            ...oldReport,
+            ...reportData,
+            id: reportData.id!,
+            status: finalStatus,
+            history: [
+              ...oldReport.history,
+              {
+                id: `h-${Date.now()}`,
+                status: finalStatus,
+                date: new Date().toISOString(),
+                comment: finalStatus === 'Draft' 
+                  ? 'Draft updated.' 
+                  : 'Report compiled and submitted for review.',
+                user: staffName
+              }
+            ]
+          } as MarketReport;
+          reports[index] = finalReport;
+        } else {
+          // Fallback if ID is provided but not found
+          finalReport = {
+            ...reportData,
+            id: reportData.id!,
+            status: finalStatus,
+            history: [
+              {
+                id: `h-${Date.now()}`,
+                status: finalStatus,
+                date: new Date().toISOString(),
+                comment: finalStatus === 'Draft' 
+                  ? 'Draft created.' 
+                  : 'Report created and submitted for review.',
+                user: staffName
+              }
+            ]
+          } as MarketReport;
+          reports.unshift(finalReport);
+        }
+      } else {
+        const newId = `REP-2026-${String(reports.length + 1).padStart(3, '0')}`;
+        finalReport = {
+          ...reportData,
+          id: newId,
+          status: finalStatus,
+          history: [
+            {
+              id: `h-${Date.now()}`,
+              status: finalStatus,
+              date: new Date().toISOString(),
+              comment: finalStatus === 'Draft' 
+                ? 'Draft saved.' 
+                : 'Report created and submitted for review.',
+              user: staffName
+            }
+          ]
+        } as MarketReport;
+        reports.unshift(finalReport);
+      }
+
       setStorageItem(KEYS.REPORTS, reports);
 
       dbService.addLog({
         userId: reportData.staffId,
         userName: staffName,
         userRole: 'staff',
-        action: 'Submitted Report',
-        details: `Submitted report ${newId} (${reportData.category}) for ${reportData.region}.`
+        action: finalStatus === 'Draft' ? 'Saved Draft' : 'Submitted Report',
+        details: `${finalStatus === 'Draft' ? 'Saved draft' : 'Submitted report'} ${finalReport.id} for ${reportData.institutionName} in ${reportData.location}.`
       });
 
-      const admins = dbService.getUsers().filter(u => u.role === 'admin');
-      admins.forEach(admin => {
-        dbService.addNotification({
-          userId: admin.id,
-          title: 'New Report Submitted',
-          message: `${staffName} submitted report ${newId} for ${reportData.region}.`,
-          type: 'info',
-          reportId: newId
+      if (finalStatus !== 'Draft') {
+        const admins = dbService.getUsers().filter(u => u.role === 'admin');
+        admins.forEach(admin => {
+          dbService.addNotification({
+            userId: admin.id,
+            title: 'New Report Submitted',
+            message: `${staffName} submitted report ${finalReport.id} for ${reportData.institutionName}.`,
+            type: 'info',
+            reportId: finalReport.id
+          });
         });
-      });
+      }
 
-      return newReport;
+      return finalReport;
     }
 
     // LIVE FIRESTORE IMPLEMENTATION
-    console.log("[DbService] Writing new report to live Firestore...");
+    console.log("[DbService] Upserting report in live Firestore...");
     const reportCollectionRef = collection(db, 'reports');
-    
-    // We generate a timestamp for incremental indexing
-    const pendingId = `REP-${Date.now().toString().slice(-6)}`;
-    const firestoreReportDoc: Omit<MarketReport, 'id'> = {
+    const tempId = reportData.id || `REP-${Date.now().toString().slice(-6)}`;
+
+    const firestoreReportDoc = {
       ...reportData,
-      status: 'Pending',
+      status: finalStatus,
       history: [
         {
           id: `h-${Date.now()}`,
-          status: 'Pending',
+          status: finalStatus,
           date: new Date().toISOString(),
-          comment: 'Report compiled and uploaded directly to Firestore collection.',
+          comment: isEdit 
+            ? (finalStatus === 'Draft' ? 'Draft report updated in Firestore.' : 'Draft report finalized and submitted to Firestore.')
+            : (finalStatus === 'Draft' ? 'Draft report initialized in Firestore.' : 'Report compiled and uploaded directly to Firestore.'),
           user: staffName
         }
       ]
     };
 
-    addDoc(reportCollectionRef, firestoreReportDoc).then((docRef) => {
-      // Update with generated Document ID as report ID for strict compatibility
-      updateDoc(doc(db, 'reports', docRef.id), { id: docRef.id });
-
-      // Log actions
-      dbService.addLog({
-        userId: reportData.staffId,
-        userName: staffName,
-        userRole: 'staff',
-        action: 'Submitted Report',
-        details: `Submitted database report ${docRef.id} (${reportData.category}).`
+    if (isEdit) {
+      const docRef = doc(db, 'reports', reportData.id!);
+      updateDoc(docRef, firestoreReportDoc).then(() => {
+        dbService.addLog({
+          userId: reportData.staffId,
+          userName: staffName,
+          userRole: 'staff',
+          action: finalStatus === 'Draft' ? 'Saved Draft' : 'Submitted Report',
+          details: `Updated Firestore report ${reportData.id} (${finalStatus}) for ${reportData.institutionName}.`
+        });
       });
-    });
+    } else {
+      addDoc(reportCollectionRef, firestoreReportDoc).then((docRef) => {
+        updateDoc(doc(db, 'reports', docRef.id), { id: docRef.id });
+        dbService.addLog({
+          userId: reportData.staffId,
+          userName: staffName,
+          userRole: 'staff',
+          action: finalStatus === 'Draft' ? 'Saved Draft' : 'Submitted Report',
+          details: `Submitted database report ${docRef.id} (${finalStatus}) for ${reportData.institutionName}.`
+        });
+      });
+    }
 
-    // Return visual representation temporarily
     return {
       ...reportData,
-      id: pendingId,
-      status: 'Pending',
+      id: tempId,
+      status: finalStatus,
       history: []
-    };
+    } as MarketReport;
   },
 
   updateReportStatus: (
@@ -613,7 +678,7 @@ export const dbService = {
     
     const satisfiedReports = reportsList.filter(r => r.metrics?.customerSatisfaction);
     const avgSatisfaction = satisfiedReports.length > 0
-      ? satisfiedReports.reduce((acc, curr) => acc + curr.metrics.customerSatisfaction, 0) / satisfiedReports.length
+      ? satisfiedReports.reduce((acc, curr) => acc + (curr.metrics?.customerSatisfaction || 0), 0) / satisfiedReports.length
       : 4.2;
 
     return {

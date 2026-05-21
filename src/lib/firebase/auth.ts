@@ -8,7 +8,7 @@ import {
   onAuthStateChanged,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, updateDoc, where, limit } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 const SESSION_KEY = 'rms_auth_session';
@@ -73,11 +73,27 @@ export const authService = {
 
       // Fetch accompanying role and account details from Firestore 'users' collection
       const userDocRef = doc(db, 'users', firebaseUser.uid);
-      const userDocSnap = await getDoc(userDocRef);
+      let userDocSnap = await getDoc(userDocRef);
+      let resolvedUserDocId = firebaseUser.uid;
+
+      if (!userDocSnap.exists() && firebaseUser.email) {
+        const usersByEmailQuery = query(
+          collection(db, 'users'),
+          where('email', '==', firebaseUser.email),
+          limit(1)
+        );
+        const usersByEmailSnapshot = await getDocs(usersByEmailQuery);
+
+        if (!usersByEmailSnapshot.empty) {
+          userDocSnap = usersByEmailSnapshot.docs[0];
+          resolvedUserDocId = userDocSnap.id;
+          console.warn('[AuthService] Firebase user profile found by email fallback under users/', resolvedUserDocId);
+        }
+      }
 
       if (!userDocSnap.exists()) {
         await firebaseSignOut(auth);
-        throw new Error('Your user profile was not found in the database. Please contact an admin to register your UID.');
+        throw new Error('Your user profile was not found in Firestore users/. Add a users/{uid} document or a matching email record.');
       }
 
       const userData = userDocSnap.data() as Omit<User, 'id'>;
@@ -89,11 +105,12 @@ export const authService = {
 
       const appUser: User = {
         ...userData,
-        id: firebaseUser.uid, // Map Firestore UID as User ID
+        id: resolvedUserDocId,
       };
 
       // Record activity and last active timestamp in live Firestore
-      await updateDoc(userDocRef, {
+      const lastActiveUserDocRef = doc(db, 'users', resolvedUserDocId);
+      await updateDoc(lastActiveUserDocRef, {
         lastActive: new Date().toISOString()
       });
 

@@ -20,38 +20,44 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, sidebar
   const getPageTitle = () => {
     switch (activeTab) {
       case 'dashboard':
-        return user?.role === 'admin' ? 'Executive Analytics Portal' : 'Staff Insights Dashboard';
+        return 'Dashboard';
       case 'reports':
-        return 'Market Intelligence Reports';
+        return 'Review Reports';
+      case 'create-report':
+        return 'Create Report';
       case 'staff':
-        return 'Staff & Access Management';
+        return 'Team Directory';
       case 'notifications':
-        return 'Activity Alerts & Updates';
+        return 'Notifications';
       case 'settings':
-        return 'System & Profile Settings';
+        return 'Settings';
       default:
-        return 'Market Reports';
+        return 'Report Management System';
     }
   };
 
   const getPageSubtitle = () => {
     switch (activeTab) {
       case 'dashboard':
-        return `Welcome back, ${user?.name}. Here is today's regional telemetry summary.`;
+        return `Welcome back, ${user?.name}! Here’s your operational dashboard.`;
       case 'reports':
-        return 'Submit, review, and filter through regional intelligence matrices.';
+        return 'Inspect and audit institutional submissions.';
+      case 'create-report':
+        return 'Compile and submit institutional activity reports.';
       case 'staff':
-        return 'Manage operational staff registration status and permission states.';
+        return 'View and manage operational staff clearances.';
       case 'notifications':
-        return 'Stay updated on report approvals, revisions, and system audits.';
+        return 'See your latest alerts and review notifications.';
       case 'settings':
-        return 'Configure your credentials, notification thresholds, and region filters.';
+        return 'Update your analyst profile and system configurations.';
       default:
         return '';
     }
   };
 
   if (!user) return null;
+
+  const displayName = user.name ? user.name.split(' ')[0] : 'User';
 
   return (
     <header className="navbar">
@@ -106,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, sidebar
             }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', fontSize: '0.8rem', lineHeight: '1.2' }} className="user-info">
-            <span style={{ fontWeight: '700' }}>{user.name.split(' ')[0]}</span>
+            <span style={{ fontWeight: '700' }}>{displayName}</span>
             <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>{user.role}</span>
           </div>
         </div>

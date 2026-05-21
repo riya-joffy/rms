@@ -39,19 +39,33 @@ export interface MarketReport {
   id: string;
   date: string;
   time: string;
-  region: string;
+  region?: string;
   staffName: string;
   staffId: string;
   department: string;
-  category: 'Competitor Intelligence' | 'Consumer Trends' | 'Pricing Analysis' | 'Inventory & Supply' | 'Promotional Tracking';
-  observations: string;
-  metrics: MarketMetrics;
-  issuesFound: string;
-  recommendations: string;
+  category?: 'Competitor Intelligence' | 'Consumer Trends' | 'Pricing Analysis' | 'Inventory & Supply' | 'Promotional Tracking';
+  observations?: string;
+  metrics?: MarketMetrics;
+  issuesFound?: string;
+  recommendations?: string;
   attachments: Attachment[];
   status: 'Pending' | 'Approved' | 'Rejected' | 'Draft';
   feedback?: string;
   history: ReportHistory[];
+
+  // Institutional Activity Report Fields
+  activityType: string;
+  meetingType: string;
+  institutionName: string;
+  location: string;
+  finalYearStudentsCount: number;
+  headOfInstitution: string;
+  contactNumber: string;
+  spocName: string;
+  spocContact: string;
+  spocEmail: string;
+  notes: string;
+  dateTime: string;
 }
 
 export interface ActivityLog {

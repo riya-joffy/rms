@@ -55,7 +55,7 @@ export default function LoginPage() {
             <div className="login-logo-icon">M</div>
             <span>MarketPulse RMS</span>
           </div>
-          <p className="login-subtitle">Corporate Market Report Management Suite</p>
+          <p className="login-subtitle">Market report system</p>
         </div>
 
         {/* Error Notice */}
@@ -107,7 +107,7 @@ export default function LoginPage() {
                   <line x1="2" y1="12" x2="6" y2="12" />
                   <line x1="18" y1="12" x2="22" y2="12" />
                 </svg>
-                Authenticating Session...
+                Signing in...
               </span>
             ) : 'Sign In To Account'}
           </button>
@@ -115,7 +115,7 @@ export default function LoginPage() {
 
         {/* Demo Quick Fills */}
         <div className="demo-credentials-box">
-          <div className="demo-title">Quick demo login profiles</div>
+          <div className="demo-title">Demo logins</div>
           
           <div 
             className="demo-credentials-item"

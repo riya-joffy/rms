@@ -67,8 +67,8 @@ export const SVGCharts: React.FC = () => {
       <div className="chart-card">
         <div className="chart-card-header">
           <div className="chart-card-title">
-            <h3>Operational Report Velocity</h3>
-            <p>Historical submissions trend over the last 6 calendar months</p>
+            <h3>Report activity</h3>
+            <p>Submission trends for the last 6 months</p>
           </div>
           <span 
             style={{
@@ -200,8 +200,8 @@ export const SVGCharts: React.FC = () => {
       <div className="chart-card">
         <div className="chart-card-header">
           <div className="chart-card-title">
-            <h3>Report Categories Matrix</h3>
-            <p>Intelligence volume categorized by business vertical</p>
+            <h3>Report categories</h3>
+            <p>Report counts by category</p>
           </div>
         </div>
 

@@ -11,7 +11,7 @@ interface ReportContextType {
   notifications: Notification[];
   stats: DashboardStats;
   loading: boolean;
-  createReport: (reportData: Omit<MarketReport, 'id' | 'status' | 'history' | 'feedback' | 'staffId' | 'staffName' | 'department'>) => void;
+  createReport: (reportData: Omit<MarketReport, 'id' | 'history' | 'feedback' | 'staffId' | 'staffName' | 'department'> & { id?: string; status?: 'Pending' | 'Draft' }) => void;
   reviewReport: (reportId: string, status: 'Approved' | 'Rejected', feedback: string) => void;
   markNotifAsRead: (id: string) => void;
   markAllNotifsAsRead: () => void;
@@ -40,11 +40,14 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setLoading(true);
     try {
       const allReports = dbService.getReports();
+      const visibleReports = user?.role === 'admin'
+        ? allReports
+        : allReports.filter(report => report.staffId === user?.id);
       const allLogs = dbService.getLogs();
       const userNotifs = dbService.getNotifications(user?.id || undefined);
       const computedStats = dbService.getDashboardStats();
 
-      setReports(allReports);
+      setReports(visibleReports);
       setLogs(allLogs);
       setNotifications(userNotifs);
       setStats(computedStats);
@@ -61,7 +64,7 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [user, loadData]);
 
   const createReport = (
-    reportData: Omit<MarketReport, 'id' | 'status' | 'history' | 'feedback' | 'staffId' | 'staffName' | 'department'>
+    reportData: Omit<MarketReport, 'id' | 'history' | 'feedback' | 'staffId' | 'staffName' | 'department'> & { id?: string; status?: 'Pending' | 'Draft' }
   ) => {
     if (!user) return;
 

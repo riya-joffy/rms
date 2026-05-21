@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useReports } from '../context/ReportContext';
 
@@ -15,7 +15,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
   const { user, logout } = useAuth();
   const { notifications } = useReports();
 
+  const isAdmin = user?.role === 'admin';
+  const isStaff = user?.role === 'staff';
+
+  const staffNavItems = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'create-report', label: 'Create Report' },
+    { id: 'notifications', label: 'Notifications' },
+    { id: 'settings', label: 'Settings' }
+  ];
+
+  const adminNavItems = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'reports', label: 'Review Reports' },
+    { id: 'staff', label: 'Staff Directory' },
+    { id: 'notifications', label: 'Notifications' },
+    { id: 'settings', label: 'Settings' }
+  ];
+
+  const navItems = isAdmin ? adminNavItems : staffNavItems;
   const unreadCount = notifications.filter(n => !n.read).length;
+
+  useEffect(() => {
+    console.log('ROLE:', user?.role);
+    console.log('ACTIVE TAB:', activeTab);
+  }, [user?.role, activeTab]);
 
   const handleNavClick = (tab: string) => {
     setActiveTab(tab);
@@ -47,86 +71,75 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
         </div>
 
         <nav className="sidebar-nav">
-          <div 
-            className={`sidebar-link ${activeTab === 'dashboard' ? 'active' : ''}`}
-            onClick={() => handleNavClick('dashboard')}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="7" height="9" rx="1" />
-              <rect x="14" y="3" width="7" height="5" rx="1" />
-              <rect x="14" y="12" width="7" height="9" rx="1" />
-              <rect x="3" y="16" width="7" height="5" rx="1" />
-            </svg>
-            Dashboard
-          </div>
-
-          <div 
-            className={`sidebar-link ${activeTab === 'reports' ? 'active' : ''}`}
-            onClick={() => handleNavClick('reports')}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="16" y1="13" x2="8" y2="13" />
-              <line x1="16" y1="17" x2="8" y2="17" />
-              <polyline points="10 9 9 9 8 9" />
-            </svg>
-            Market Reports
-          </div>
-
-          {user.role === 'admin' && (
-            <div 
-              className={`sidebar-link ${activeTab === 'staff' ? 'active' : ''}`}
-              onClick={() => handleNavClick('staff')}
+          {navItems.map((item) => (
+            <div
+              key={item.id}
+              className={`sidebar-link ${activeTab === item.id ? 'active' : ''}`}
+              onClick={() => handleNavClick(item.id)}
+              style={item.id === 'notifications' ? { display: 'flex', justifyContent: 'space-between', width: '100%' } : undefined}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                <circle cx="9" cy="7" r="4" />
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-              </svg>
-              Staff Directory
-            </div>
-          )}
-
-          <div 
-            className={`sidebar-link ${activeTab === 'notifications' ? 'active' : ''}`}
-            onClick={() => handleNavClick('notifications')}
-            style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              Notifications
-            </span>
-            {unreadCount > 0 && (
-              <span 
-                style={{
-                  backgroundColor: 'var(--primary)',
-                  color: 'white',
-                  fontSize: '0.75rem',
-                  fontWeight: '700',
-                  padding: '2px 8px',
-                  borderRadius: 'var(--radius-full)'
-                }}
-              >
-                {unreadCount}
+              <span style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                {item.id === 'dashboard' && (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="9" rx="1" />
+                    <rect x="14" y="3" width="7" height="5" rx="1" />
+                    <rect x="14" y="12" width="7" height="9" rx="1" />
+                    <rect x="3" y="16" width="7" height="5" rx="1" />
+                  </svg>
+                )}
+                {item.id === 'create-report' && (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                )}
+                {item.id === 'reports' && (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                  </svg>
+                )}
+                {item.id === 'staff' && (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                    <circle cx="9" cy="7" r="4" />
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                  </svg>
+                )}
+                {item.id === 'notifications' && (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                )}
+                {item.id === 'settings' && (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                )}
+                <span>{item.label}</span>
               </span>
-            )}
-          </div>
-
-          <div 
-            className={`sidebar-link ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => handleNavClick('settings')}
-          >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-            Settings
-          </div>
+              {item.id === 'notifications' && unreadCount > 0 && (
+                <span 
+                  style={{
+                    backgroundColor: 'var(--primary)',
+                    color: 'white',
+                    fontSize: '0.75rem',
+                    fontWeight: '700',
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-full)'
+                  }}
+                >
+                  {unreadCount}
+                </span>
+              )}
+            </div>
+          ))}
         </nav>
 
         <div className="sidebar-footer">

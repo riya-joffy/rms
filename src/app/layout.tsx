@@ -4,8 +4,8 @@ import { ReportProvider } from "../context/ReportContext";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MarketPulse RMS - Market Report Management System",
-  description: "Enterprise SaaS Platform for regional market intelligence analysis, reporting and review workflows.",
+  title: "MarketPulse RMS - Market Report System",
+  description: "Simple market reporting and review dashboard with Firebase support.",
 };
 
 export default function RootLayout({
