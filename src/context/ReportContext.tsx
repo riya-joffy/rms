@@ -1,21 +1,26 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { MarketReport, ActivityLog, Notification, DashboardStats, Attachment } from '../types';
-import { dbService } from '../lib/firebase/db';
+import { MarketReport, ActivityLog, DashboardStats, Organization } from '../types';
+import { dbService, isFirebaseActive } from '../lib/firebase/db';
 import { useAuth } from './AuthContext';
+import { isAdminRole } from '../lib/roles';
 
 interface ReportContextType {
   reports: MarketReport[];
   logs: ActivityLog[];
-  notifications: Notification[];
   stats: DashboardStats;
+  organizations: Organization[];
   loading: boolean;
-  createReport: (reportData: Omit<MarketReport, 'id' | 'history' | 'feedback' | 'staffId' | 'staffName' | 'department'> & { id?: string; status?: 'Pending' | 'Draft' }) => void;
+  createReport: (
+    reportData: Omit<MarketReport, 'id' | 'history' | 'feedback' | 'staffId' | 'staffName' | 'department'> & {
+      id?: string;
+      status?: 'Pending' | 'Draft';
+    }
+  ) => Promise<void>;
   reviewReport: (reportId: string, status: 'Approved' | 'Rejected', feedback: string) => void;
-  markNotifAsRead: (id: string) => void;
-  markAllNotifsAsRead: () => void;
   refreshAllData: () => void;
+  addOrganization: (orgData: Omit<Organization, 'id'>) => Promise<Organization | void>;
 }
 
 const ReportContext = createContext<ReportContextType | undefined>(undefined);
@@ -24,7 +29,6 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const { user } = useAuth();
   const [reports, setReports] = useState<MarketReport[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     totalReports: 0,
     pendingReports: 0,
@@ -32,43 +36,75 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     rejectedReports: 0,
     activeStaffCount: 0,
     monthlyGrowthRate: 0,
-    averageSatisfaction: 0
+    averageSatisfaction: 0,
   });
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const loadData = useCallback(() => {
-    setLoading(true);
-    try {
-      const allReports = dbService.getReports();
-      const visibleReports = user?.role === 'admin'
+  const applyVisibleReports = useCallback(
+    (allReports: MarketReport[]) => {
+      const visibleReports = isAdminRole(user?.role)
         ? allReports
-        : allReports.filter(report => report.staffId === user?.id);
-      const allLogs = dbService.getLogs();
-      const userNotifs = dbService.getNotifications(user?.id || undefined);
-      const computedStats = dbService.getDashboardStats();
-
+        : allReports.filter((report) => report.staffId === user?.id);
       setReports(visibleReports);
-      setLogs(allLogs);
-      setNotifications(userNotifs);
-      setStats(computedStats);
+      setStats(dbService.getDashboardStats());
+    },
+    [user]
+  );
+
+  const loadLocalData = useCallback(() => {
+    try {
+      applyVisibleReports(dbService.getReports());
+      setLogs(dbService.getLogs());
+      setOrganizations(dbService.getOrganizations());
     } catch (err) {
-      console.error("Error loading mock database content:", err);
+      console.error('Error loading local database content:', err);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [applyVisibleReports]);
 
-  // Load data initially and whenever the active user session changes
   useEffect(() => {
-    loadData();
-  }, [user, loadData]);
+    if (!user) {
+      setReports([]);
+      setLoading(false);
+      return;
+    }
 
-  const createReport = (
-    reportData: Omit<MarketReport, 'id' | 'history' | 'feedback' | 'staffId' | 'staffName' | 'department'> & { id?: string; status?: 'Pending' | 'Draft' }
+    if (!isFirebaseActive()) {
+      loadLocalData();
+      return;
+    }
+
+    setLoading(true);
+
+    const unsubscribe = dbService.syncLiveCollections(
+      (allReports) => {
+        applyVisibleReports(allReports);
+        setLoading(false);
+      },
+      () => {
+        setStats(dbService.getDashboardStats());
+      },
+      (allLogs) => {
+        setLogs(allLogs);
+      },
+      (allOrgs) => {
+        setOrganizations(allOrgs);
+      }
+    );
+
+    return unsubscribe;
+  }, [user, loadLocalData, applyVisibleReports]);
+
+  const createReport = async (
+    reportData: Omit<MarketReport, 'id' | 'history' | 'feedback' | 'staffId' | 'staffName' | 'department'> & {
+      id?: string;
+      status?: 'Pending' | 'Draft';
+    }
   ) => {
     if (!user) return;
 
-    // Extend report data with current logged in staff credentials
     const submissionData = {
       ...reportData,
       staffId: user.id,
@@ -76,30 +112,37 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       department: user.department,
     };
 
-    dbService.addReport(submissionData, user.name);
-    loadData(); // Re-trigger local storage synchronizer
+    await dbService.addReport(submissionData, user.name);
+
+    if (!isFirebaseActive()) {
+      loadLocalData();
+    }
   };
 
   const reviewReport = (reportId: string, status: 'Approved' | 'Rejected', feedback: string) => {
-    if (!user || user.role !== 'admin') return;
+    if (!user || !isAdminRole(user.role)) return;
 
     dbService.updateReportStatus(reportId, status, feedback, user.id, user.name);
-    loadData(); // Sync states
-  };
 
-  const markNotifAsRead = (id: string) => {
-    dbService.markNotificationAsRead(id);
-    loadData(); // Sync states
-  };
-
-  const markAllNotifsAsRead = () => {
-    if (!user) return;
-    dbService.markAllNotificationsAsRead(user.id);
-    loadData(); // Sync states
+    if (!isFirebaseActive()) {
+      loadLocalData();
+    }
   };
 
   const refreshAllData = () => {
-    loadData();
+    loadLocalData();
+  };
+
+  const addOrganization = async (orgData: Omit<Organization, 'id'>) => {
+    try {
+      const newOrg = await dbService.addOrganization(orgData);
+      if (!isFirebaseActive()) {
+        loadLocalData();
+      }
+      return newOrg;
+    } catch (e) {
+      console.error('Error adding organization:', e);
+    }
   };
 
   return (
@@ -107,14 +150,13 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       value={{
         reports,
         logs,
-        notifications,
         stats,
+        organizations,
         loading,
         createReport,
         reviewReport,
-        markNotifAsRead,
-        markAllNotifsAsRead,
-        refreshAllData
+        refreshAllData,
+        addOrganization,
       }}
     >
       {children}

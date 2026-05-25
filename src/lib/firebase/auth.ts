@@ -1,5 +1,6 @@
 import { User } from '../../types';
 import { dbService } from './db';
+import { resolveUserRole, normalizeRole } from '../roles';
 
 // Real Firebase Auth dependencies
 import { 
@@ -8,7 +9,7 @@ import {
   onAuthStateChanged,
   User as FirebaseUser
 } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, query, updateDoc, where, limit } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, setDoc, where, limit } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 const SESSION_KEY = 'rms_auth_session';
@@ -37,8 +38,23 @@ export const authService = {
             return;
           }
 
-          if (password !== 'password' && password !== 'admin') {
-            reject(new Error('Invalid credentials. Password is "password".'));
+          const credentials = (() => {
+            try {
+              const raw = localStorage.getItem('rms_user_credentials');
+              return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+            } catch {
+              return {};
+            }
+          })();
+          const storedPassword = credentials[email.toLowerCase()];
+
+          if (storedPassword) {
+            if (password !== storedPassword) {
+              reject(new Error('Invalid email or password.'));
+              return;
+            }
+          } else if (password !== 'password' && password !== 'admin') {
+            reject(new Error('Invalid email or password.'));
             return;
           }
 
@@ -47,20 +63,24 @@ export const authService = {
             return;
           }
 
-          user.lastActive = new Date().toISOString();
-          const updatedUsers = users.map(u => u.id === user.id ? user : u);
+          const sessionUser: User = {
+            ...user,
+            role: resolveUserRole(user.role, user.email),
+            lastActive: new Date().toISOString(),
+          };
+          const updatedUsers = users.map((u) => (u.id === user.id ? sessionUser : u));
           localStorage.setItem('rms_db_users', JSON.stringify(updatedUsers));
-          localStorage.setItem(SESSION_KEY, JSON.stringify(user));
+          localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
           
           dbService.addLog({
-            userId: user.id,
-            userName: user.name,
-            userRole: user.role,
+            userId: sessionUser.id,
+            userName: sessionUser.name,
+            userRole: sessionUser.role,
             action: 'User Logged In',
-            details: `User ${user.name} (${user.role}) logged in successfully (Mock Mode).`
+            details: `User ${sessionUser.name} (${sessionUser.role}) logged in successfully (Mock Mode).`
           });
 
-          resolve(user);
+          resolve(sessionUser);
         }, 600);
       });
     }
@@ -97,6 +117,8 @@ export const authService = {
       }
 
       const userData = userDocSnap.data() as Omit<User, 'id'>;
+      const resolvedEmail = (firebaseUser.email || userData.email || '').trim();
+      const resolvedRole = resolveUserRole(userData.role, resolvedEmail);
 
       if (userData.status === 'suspended') {
         await firebaseSignOut(auth);
@@ -105,14 +127,20 @@ export const authService = {
 
       const appUser: User = {
         ...userData,
-        id: resolvedUserDocId,
+        id: firebaseUser.uid,
+        email: resolvedEmail,
+        role: resolvedRole,
       };
 
-      // Record activity and last active timestamp in live Firestore
-      const lastActiveUserDocRef = doc(db, 'users', resolvedUserDocId);
-      await updateDoc(lastActiveUserDocRef, {
-        lastActive: new Date().toISOString()
-      });
+      // Keep canonical profile at Firebase Auth UID (fixes legacy docs with wrong id/role)
+      await setDoc(
+        doc(db, 'users', firebaseUser.uid),
+        {
+          ...appUser,
+          lastActive: new Date().toISOString(),
+        },
+        { merge: true }
+      );
 
       // Cache session in LocalStorage for sync dashboard checks
       localStorage.setItem(SESSION_KEY, JSON.stringify(appUser));
@@ -186,7 +214,10 @@ export const authService = {
         return dbUser;
       }
       
-      return sessionUser;
+      return {
+        ...sessionUser,
+        role: resolveUserRole(sessionUser.role, sessionUser.email),
+      };
     } catch {
       return null;
     }

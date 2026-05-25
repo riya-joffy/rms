@@ -3,6 +3,7 @@
 import { ReactNode, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/navigation';
+import { isAdminRole } from '../lib/roles';
 
 interface AdminRouteGuardProps {
   children: ReactNode;
@@ -18,12 +19,12 @@ export const AdminRouteGuard: React.FC<AdminRouteGuardProps> = ({ children }) =>
       router.replace('/login');
       return;
     }
-    if (user.role !== 'admin') {
+    if (!isAdminRole(user.role)) {
       router.replace('/dashboard');
     }
   }, [user, loading, router]);
 
-  if (loading || !user || user.role !== 'admin') {
+  if (loading || !user || !isAdminRole(user.role)) {
     return null;
   }
 

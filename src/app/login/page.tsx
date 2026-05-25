@@ -39,11 +39,6 @@ export default function LoginPage() {
     }
   };
 
-  const fillCredentials = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword('password');
-    setError(null);
-  };
 
   return (
     <main className="login-container">
@@ -113,42 +108,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Demo Quick Fills */}
-        <div className="demo-credentials-box">
-          <div className="demo-title">Demo logins</div>
-          
-          <div 
-            className="demo-credentials-item"
-            onClick={() => fillCredentials('admin@rms.com')}
-          >
-            <span> Eleanor Vance (Admin)</span>
-            <span style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>Click to fill</span>
-          </div>
 
-          <div 
-            className="demo-credentials-item"
-            onClick={() => fillCredentials('marcus@rms.com')}
-          >
-            <span> Marcus Chen (Staff)</span>
-            <span style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>Click to fill</span>
-          </div>
-
-          <div 
-            className="demo-credentials-item"
-            onClick={() => fillCredentials('sarah@rms.com')}
-          >
-            <span> Sarah Jenkins (Staff)</span>
-            <span style={{ color: 'var(--primary)', fontSize: '0.75rem' }}>Click to fill</span>
-          </div>
-
-          <div 
-            className="demo-credentials-item"
-            onClick={() => fillCredentials('elena@rms.com')}
-          >
-            <span> Elena Rostova (Suspended)</span>
-            <span style={{ color: 'var(--error)', fontSize: '0.75rem' }}>Click to fill</span>
-          </div>
-        </div>
 
       </div>
 

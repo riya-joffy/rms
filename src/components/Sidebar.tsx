@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useReports } from '../context/ReportContext';
+import { isAdminRole } from '../lib/roles';
 
 interface SidebarProps {
   activeTab: string;
@@ -13,28 +13,22 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen, setIsOpen }) => {
   const { user, logout } = useAuth();
-  const { notifications } = useReports();
 
-  const isAdmin = user?.role === 'admin';
-  const isStaff = user?.role === 'staff';
+  const isAdmin = isAdminRole(user?.role);
 
   const staffNavItems = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'create-report', label: 'Create Report' },
-    { id: 'notifications', label: 'Notifications' },
-    { id: 'settings', label: 'Settings' }
+    { id: 'expense-tracker', label: 'Expense Tracker' },
   ];
 
   const adminNavItems = [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'reports', label: 'Review Reports' },
     { id: 'staff', label: 'Staff Directory' },
-    { id: 'notifications', label: 'Notifications' },
-    { id: 'settings', label: 'Settings' }
+    { id: 'staff-expenses', label: 'Staff Expenses' },
   ];
 
   const navItems = isAdmin ? adminNavItems : staffNavItems;
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
     console.log('ROLE:', user?.role);
@@ -76,7 +70,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
               key={item.id}
               className={`sidebar-link ${activeTab === item.id ? 'active' : ''}`}
               onClick={() => handleNavClick(item.id)}
-              style={item.id === 'notifications' ? { display: 'flex', justifyContent: 'space-between', width: '100%' } : undefined}
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
                 {item.id === 'dashboard' && (
@@ -93,15 +86,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
                     <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
                 )}
-                {item.id === 'reports' && (
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <polyline points="10 9 9 9 8 9" />
-                  </svg>
-                )}
                 {item.id === 'staff' && (
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -110,10 +94,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
                     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                   </svg>
                 )}
-                {item.id === 'notifications' && (
+                {item.id === 'expense-tracker' && (
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  </svg>
+                )}
+                {item.id === 'staff-expenses' && (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="12" y1="1" x2="12" y2="23" />
+                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                   </svg>
                 )}
                 {item.id === 'settings' && (
@@ -124,20 +114,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
                 )}
                 <span>{item.label}</span>
               </span>
-              {item.id === 'notifications' && unreadCount > 0 && (
-                <span 
-                  style={{
-                    backgroundColor: 'var(--primary)',
-                    color: 'white',
-                    fontSize: '0.75rem',
-                    fontWeight: '700',
-                    padding: '2px 8px',
-                    borderRadius: 'var(--radius-full)'
-                  }}
-                >
-                  {unreadCount}
-                </span>
-              )}
             </div>
           ))}
         </nav>

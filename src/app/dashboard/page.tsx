@@ -9,10 +9,15 @@ import { Navbar } from '../../components/Navbar';
 import { ReportModal } from '../../components/ReportModal';
 import { CreateReportForm } from '../../components/CreateReportForm';
 import { MarketReport } from '../../types';
+import { ReportCard } from '../../components/ReportCard';
+import { CreateUserModal } from '../../components/CreateUserModal';
+import { ExpenseTracker } from '../../components/ExpenseTracker';
+import { AdminExpenseTracker } from '../../components/AdminExpenseTracker';
+import { isAdminRole, isStaffRole } from '../../lib/roles';
 
 export default function DashboardPage() {
   const { user, users, toggleUserStatus, loading: authLoading } = useAuth();
-  const { reports, logs, notifications, stats, loading: reportsLoading, markNotifAsRead, markAllNotifsAsRead } = useReports();
+  const { reports, stats, loading: reportsLoading } = useReports();
   const router = useRouter();
 
   // Tab State: 'dashboard' | 'reports' | 'staff' | 'notifications' | 'settings' | 'create-report'
@@ -27,6 +32,7 @@ export default function DashboardPage() {
   // Modal & Edit States
   const [selectedReport, setSelectedReport] = useState<MarketReport | null>(null);
   const [reportToEdit, setReportToEdit] = useState<MarketReport | null>(null);
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
 
   // Verification redirect
   useEffect(() => {
@@ -41,7 +47,10 @@ export default function DashboardPage() {
     console.log('ROLE:', user.role);
     console.log('ACTIVE TAB:', activeTab);
 
-    if (user.role === 'staff' && !['dashboard', 'create-report', 'notifications', 'settings'].includes(activeTab)) {
+    if (isStaffRole(user.role) && !['dashboard', 'create-report', 'expense-tracker'].includes(activeTab)) {
+      setActiveTab('dashboard');
+    }
+    if (isAdminRole(user.role) && !['dashboard', 'staff', 'staff-expenses'].includes(activeTab)) {
       setActiveTab('dashboard');
     }
   }, [activeTab, setActiveTab, user]);
@@ -96,15 +105,8 @@ export default function DashboardPage() {
   };
 
   const handleInspectReport = (report: MarketReport) => {
-    if (user.role === 'admin' || report.staffId === user.id) {
+    if (isAdminRole(user.role) || report.staffId === user.id) {
       setSelectedReport(report);
-    }
-  };
-
-  const handleInspectReportById = (id: string) => {
-    const rep = reports.find(r => r.id === id);
-    if (rep && (user.role === 'admin' || rep.staffId === user.id)) {
-      setSelectedReport(rep);
     }
   };
 
@@ -138,82 +140,55 @@ export default function DashboardPage() {
               ======================================================== */}
           {activeTab === 'dashboard' && (
             <>
-              {user.role === 'staff' ? (
+              {isStaffRole(user.role) ? (
                 <>
                   {/* Staff Telemetry Stats Cards Grid */}
                   <section className="stats-grid">
-                    {/* Stat 1 */}
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-title">Total Reports</span>
+                      </div>
+                      <div className="stat-value">
+                        {reports.filter(r => r.staffId === user.id).length}
+                      </div>
+                      <div className="stat-footer">
+                        <span>All recorded reports</span>
+                      </div>
+                    </div>
+
+                    <div className="stat-card">
+                      <div className="stat-header">
+                        <span className="stat-title">Draft Reports</span>
+                      </div>
+                      <div className="stat-value">
+                        {reports.filter(r => r.staffId === user.id && r.status === 'Draft').length}
+                      </div>
+                      <div className="stat-footer">
+                        <span>Saved drafts</span>
+                      </div>
+                    </div>
+
                     <div className="stat-card">
                       <div className="stat-header">
                         <span className="stat-title">Submitted Reports</span>
-                        <div className="stat-icon-box purple">
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                          </svg>
-                        </div>
                       </div>
                       <div className="stat-value">
                         {reports.filter(r => r.staffId === user.id && r.status !== 'Draft').length}
                       </div>
                       <div className="stat-footer">
-                        <span>Active submissions</span>
+                        <span>Pending or reviewed</span>
                       </div>
                     </div>
 
-                    {/* Stat 2 */}
                     <div className="stat-card">
                       <div className="stat-header">
-                        <span className="stat-title">Saved Drafts</span>
-                        <div className="stat-icon-box orange">
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="12" cy="12" r="10" />
-                            <polyline points="12 6 12 12 16 14" />
-                          </svg>
-                        </div>
-                      </div>
-                      <div className="stat-value" style={{ color: 'var(--warning)' }}>
-                        {reports.filter(r => r.staffId === user.id && r.status === 'Draft').length}
-                      </div>
-                      <div className="stat-footer">
-                        <span>Awaiting completion</span>
-                      </div>
-                    </div>
-
-                    {/* Stat 3 */}
-                    <div className="stat-card">
-                      <div className="stat-header">
-                        <span className="stat-title">Approved Reports</span>
-                        <div className="stat-icon-box green">
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        </div>
+                        <span className="stat-title">Admin Feedback Count</span>
                       </div>
                       <div className="stat-value">
-                        {reports.filter(r => r.staffId === user.id && r.status === 'Approved').length}
+                        {reports.filter(r => r.staffId === user.id && (r.status === 'Approved' || r.status === 'Rejected')).length}
                       </div>
                       <div className="stat-footer">
-                        <span>Verified outcomes</span>
-                      </div>
-                    </div>
-
-                    {/* Stat 4 */}
-                    <div className="stat-card">
-                      <div className="stat-header">
-                        <span className="stat-title">Feedback / Rejections</span>
-                        <div className="stat-icon-box red" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', color: 'rgb(239, 68, 68)' }}>
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
-                        </div>
-                      </div>
-                      <div className="stat-value" style={{ color: 'rgb(239, 68, 68)' }}>
-                        {reports.filter(r => r.staffId === user.id && r.status === 'Rejected').length}
-                      </div>
-                      <div className="stat-footer">
-                        <span>Requires attention</span>
+                        <span>Processed submissions</span>
                       </div>
                     </div>
                   </section>
@@ -256,7 +231,7 @@ export default function DashboardPage() {
                               .map((rep) => (
                                 <tr key={rep.id}>
                                   <td style={{ fontFamily: 'var(--font-mono)', fontWeight: '700' }}>{rep.id}</td>
-                                  <td style={{ fontWeight: '600' }}>{rep.institutionName}</td>
+                                  <td style={{ fontWeight: '600' }}>{rep.institutionName || rep.hospitalName || rep.conferenceName || 'N/A'}</td>
                                   <td>{rep.location}</td>
                                   <td>{rep.activityType} ({rep.meetingType})</td>
                                   <td>{rep.date} @ {rep.time}</td>
@@ -390,34 +365,90 @@ export default function DashboardPage() {
                     </div>
                   </section>
 
-                  {/* Dashboard Layout Row: Admin audit feed */}
-                  <div className="analytics-section">
-                    <div className="chart-card">
-                      <div className="chart-card-header">
-                        <div className="chart-card-title">
-                          <h3>System Audit & submissions log</h3>
-                          <p>Immutable operational chronology tracker</p>
+                  {/* ========================================================
+                      REPORT MANAGEMENT (CARDS VIEW)
+                      ======================================================== */}
+                  <div className="table-card" style={{ marginTop: '24px' }}>
+                    
+                    {/* Search & Scoping bar */}
+                    <div className="table-header-bar">
+                      <div className="table-title">Report Management</div>
+                      
+                      {/* Search & filter items */}
+                      <div className="filters-row">
+                        
+                        {/* Search query box */}
+                        <div className="search-input-wrapper">
+                          <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                          </svg>
+                          <input 
+                            type="text" 
+                            placeholder="Filter by keyword, analyst, observations..." 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                          />
                         </div>
-                      </div>
 
-                      <div className="activity-list" style={{ maxHeight: '360px', overflowY: 'auto', paddingRight: '8px' }}>
-                        {logs.slice(0, 8).map(log => (
-                          <div className="activity-item" key={log.id}>
-                            <div className={`activity-dot ${
-                              log.action.includes('Approved') || log.action.includes('Active') ? 'success' :
-                              log.action.includes('Rejected') || log.action.includes('Suspended') ? 'error' : 
-                              log.action.includes('Logged In') ? 'warning' : ''
-                            }`} />
-                            <div className="activity-details">
-                              <span className="activity-text">
-                                <strong>{log.userName}</strong> ({log.userRole}): {log.details}
-                              </span>
-                              <span className="activity-time">{new Date(log.timestamp).toLocaleString()}</span>
-                            </div>
-                          </div>
-                        ))}
+                        {/* Status Scope selector */}
+                        <select 
+                          className="filter-select"
+                          value={statusFilter}
+                          onChange={(e) => setStatusFilter(e.target.value)}
+                        >
+                          <option value="All">All Statuses</option>
+                          <option value="Pending">Pending Audit</option>
+                          <option value="Approved">Approved</option>
+                          <option value="Rejected">Rejected</option>
+                        </select>
+
+                        {/* Region Scope selector */}
+                        <select 
+                          className="filter-select"
+                          value={regionFilter}
+                          onChange={(e) => setRegionFilter(e.target.value)}
+                        >
+                          <option value="All">All Regions</option>
+                          <option value="North America">North America</option>
+                          <option value="Europe">Europe</option>
+                          <option value="Asia Pacific">Asia Pacific</option>
+                          <option value="Latin America">Latin America</option>
+                        </select>
+
                       </div>
                     </div>
+
+                    {/* Data Table */}
+                    <div className="data-table-container" style={{ padding: '24px' }}>
+                      {filteredReports.length > 0 ? (
+                        <div className="report-card-grid">
+                          {filteredReports.map((rep) => (
+                            <ReportCard 
+                              key={rep.id}
+                              report={rep}
+                              onInspect={handleInspectReport}
+                              getStatusBadgeClass={getStatusBadgeClass}
+                              // Mock handlers for action buttons since backend/state mutation isn't specified in context for these yet
+                              onApprove={() => console.log('Approve', rep.id)}
+                              onReject={() => console.log('Reject', rep.id)}
+                              onDelete={() => console.log('Delete', rep.id)}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ padding: '64px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: '16px' }}>
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="9" y1="15" x2="15" y2="15" />
+                          </svg>
+                          <h4>No reports matched your filters</h4>
+                          <p style={{ fontSize: '0.85rem', marginTop: '4px' }}>Try widening your text query or resetting search constraints.</p>
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 </>
               )}
@@ -425,132 +456,30 @@ export default function DashboardPage() {
           )}
 
           {/* ========================================================
-              TAB B: REPORTS REGISTRY TABLE VIEW
-              ======================================================== */}
-          {activeTab === 'reports' && user.role === 'admin' && (
-            <div className="table-card">
-              
-              {/* Search & Scoping bar */}
-              <div className="table-header-bar">
-                <div className="table-title">Intelligence Registry Matrices</div>
-                
-                {/* Search & filter items */}
-                <div className="filters-row">
-                  
-                  {/* Search query box */}
-                  <div className="search-input-wrapper">
-                    <svg className="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="11" cy="11" r="8" />
-                      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input 
-                      type="text" 
-                      placeholder="Filter by keyword, analyst, observations..." 
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-
-                  {/* Status Scope selector */}
-                  <select 
-                    className="filter-select"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="All">All Statuses</option>
-                    <option value="Pending">Pending Audit</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Rejected">Rejected</option>
-                  </select>
-
-                  {/* Region Scope selector */}
-                  <select 
-                    className="filter-select"
-                    value={regionFilter}
-                    onChange={(e) => setRegionFilter(e.target.value)}
-                  >
-                    <option value="All">All Regions</option>
-                    <option value="North America">North America</option>
-                    <option value="Europe">Europe</option>
-                    <option value="Asia Pacific">Asia Pacific</option>
-                    <option value="Latin America">Latin America</option>
-                  </select>
-
-                </div>
-              </div>
-
-              {/* Data Table */}
-              <div className="data-table-container">
-                {filteredReports.length > 0 ? (
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>Report ID</th>
-                        <th>Region</th>
-                        <th>Submitting Analyst</th>
-                        <th>Submitted Date</th>
-                        <th>Est. Volume</th>
-                        <th>Status</th>
-                        <th style={{ textAlign: 'right' }}>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredReports.map((rep) => (
-                        <tr key={rep.id}>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontWeight: '700' }}>{rep.id}</td>
-                          <td>{rep.region}</td>
-                          <td>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                              <span style={{ fontWeight: '600' }}>{rep.staffName}</span>
-                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{rep.department}</span>
-                            </div>
-                          </td>
-                          <td>{rep.date} @ {rep.time}</td>
-                          <td style={{ fontFamily: 'var(--font-mono)' }}>
-                            ${rep.metrics?.salesVolume?.toLocaleString() || '0'}
-                          </td>
-                          <td>
-                            <span className={getStatusBadgeClass(rep.status)}>{rep.status}</span>
-                          </td>
-                          <td style={{ textAlign: 'right' }}>
-                            <button 
-                              className="btn btn-secondary btn-sm"
-                              onClick={() => handleInspectReport(rep)}
-                            >
-                              Inspect Details
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <div style={{ padding: '64px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: '16px' }}>
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="9" y1="15" x2="15" y2="15" />
-                    </svg>
-                    <h4>No reports matched your filters</h4>
-                    <p style={{ fontSize: '0.85rem', marginTop: '4px' }}>Try widening your text query or resetting search constraints.</p>
-                  </div>
-                )}
-              </div>
-
-            </div>
-          )}
-
-          {/* ========================================================
               TAB C: STAFF & PERMISSIONS ACCESS BOARD (ADMIN ONLY)
               ======================================================== */}
-          {activeTab === 'staff' && user.role === 'admin' && (
+          {activeTab === 'staff' && isAdminRole(user.role) && (
             <div className="table-card">
               
               <div className="table-header-bar">
-                <div className="table-title">Analyst Personnel Access Control</div>
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  Total registered operational agents: {users.length}
-                </span>
+                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                  <div className="table-title">Analyst Personnel Access Control</div>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                    Total registered operational agents: {users.length}
+                  </span>
+                </div>
+                <div className="filters-row">
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => setShowCreateUserModal(true)}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    Create New User
+                  </button>
+                </div>
               </div>
 
               <div className="data-table-container">
@@ -560,6 +489,7 @@ export default function DashboardPage() {
                       <th>Staff ID</th>
                       <th>Full Name</th>
                       <th>Email Address</th>
+                      <th>Role</th>
                       <th>Assigned Department</th>
                       <th>Active Region Focus</th>
                       <th>Permission Status</th>
@@ -578,6 +508,11 @@ export default function DashboardPage() {
                           </div>
                         </td>
                         <td style={{ fontFamily: 'var(--font-mono)' }}>{staff.email}</td>
+                        <td>
+                          <span className={`badge ${staff.role === 'admin' ? 'approved' : 'pending'}`}>
+                            {staff.role === 'admin' ? 'Admin' : 'Staff'}
+                          </span>
+                        </td>
                         <td>{staff.department}</td>
                         <td>{staff.region || 'All Markets'}</td>
                         <td>
@@ -610,134 +545,24 @@ export default function DashboardPage() {
           )}
 
           {/* ========================================================
-              TAB D: NOTIFICATIONS VIEWS
+              TAB: ADMIN STAFF EXPENSE TRACKER
               ======================================================== */}
-          {activeTab === 'notifications' && (
-            <div className="table-card" style={{ padding: '32px' }}>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <h3 className="table-title">Historical System & Review Notifications</h3>
-                {notifications.filter(n => !n.read).length > 0 && (
-                  <button className="btn btn-secondary btn-sm" onClick={markAllNotifsAsRead}>
-                    Mark all notifications as read
-                  </button>
-                )}
-              </div>
-
-              {notifications.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {notifications.map((notif) => (
-                    <div 
-                      key={notif.id} 
-                      className={`notification-row ${notif.read ? '' : 'unread'}`}
-                      style={{ cursor: notif.reportId ? 'pointer' : 'default' }}
-                      onClick={() => notif.reportId && handleInspectReportById(notif.reportId)}
-                    >
-                      <div className={`notification-icon-box ${notif.type}`}>
-                        {notif.type === 'success' && (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                        {notif.type === 'error' && (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
-                        )}
-                        {notif.type === 'info' && (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                          </svg>
-                        )}
-                      </div>
-
-                      <div className="notification-details">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span className="notification-title">{notif.title}</span>
-                          {!notif.read && (
-                            <button 
-                              className="btn btn-secondary btn-sm" 
-                              style={{ padding: '2px 6px', fontSize: '0.65rem' }}
-                              onClick={(e) => { e.stopPropagation(); markNotifAsRead(notif.id); }}
-                            >
-                              Mark Read
-                            </button>
-                          )}
-                        </div>
-                        <p className="notification-msg">{notif.message}</p>
-                        <span className="notification-time">{new Date(notif.timestamp).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{ padding: '64px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginBottom: '16px' }}>
-                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                  </svg>
-                  <h4>Your alerts inbox is clear</h4>
-                  <p style={{ fontSize: '0.85rem', marginTop: '4px' }}>We'll notify you here when reports get reviewed, compiled, or accounts change.</p>
-                </div>
-              )}
-
-            </div>
+          {activeTab === 'staff-expenses' && isAdminRole(user.role) && (
+            <AdminExpenseTracker
+              reports={reports}
+              users={users}
+              onInspectReport={handleInspectReport}
+            />
           )}
 
           {/* ========================================================
-              TAB E: SYSTEM & PREFERENCES SETTINGS
+              TAB: STAFF EXPENSE TRACKER
               ======================================================== */}
-          {activeTab === 'settings' && (
-            <div className="settings-container">
-              
-              <div className="settings-menu">
-                <div className="settings-menu-item active">Account Profile</div>
-                <div className="settings-menu-item">System Integrations</div>
-                <div className="settings-menu-item">Email Notifications</div>
-                <div className="settings-menu-item">Privacy & Audits</div>
-              </div>
-
-              <div className="settings-panel">
-                <h3 className="settings-section-title">Public Analyst Profile</h3>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                  <img src={user.avatar} alt={user.name} style={{ width: '80px', height: '80px', borderRadius: '50%', border: '3px solid var(--primary-glow)', objectFit: 'cover' }} />
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <span style={{ fontSize: '1.1rem', fontWeight: '700' }}>{user.name}</span>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Role: {user.role} Analyst</span>
-                    <span style={{ color: 'var(--primary)', fontSize: '0.8rem', fontWeight: '600' }}>Department: {user.department}</span>
-                  </div>
-                </div>
-
-                <div className="form-grid" style={{ marginTop: '12px' }}>
-                  <div className="form-group">
-                    <label className="form-label">System Account ID</label>
-                    <input type="text" className="form-input" value={user.id} readOnly style={{ opacity: 0.6 }} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Auth Email Address</label>
-                    <input type="email" className="form-input" value={user.email} readOnly style={{ opacity: 0.6 }} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Primary Region Focus</label>
-                    <input type="text" className="form-input" value={user.region || 'All Markets Global'} readOnly style={{ opacity: 0.6 }} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Account Clearance Level</label>
-                    <input type="text" className="form-input" value={user.role === 'admin' ? 'Level 5 (Admin Control)' : 'Level 2 (Analyst Write)'} readOnly style={{ opacity: 0.6 }} />
-                  </div>
-                </div>
-
-                <h3 className="settings-section-title" style={{ marginTop: '24px' }}>Future Firebase backend integration</h3>
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.6' }}>
-                  <p style={{ marginBottom: '8px' }}>This front-end skeleton incorporates centralized React Context interfaces, pre-coded API wrappers inside <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--primary)' }}>src/lib/firebase/*</code> and JSON schemas ready to integrate with Firestore collections and Firebase Authentication.</p>
-                  <p>When ready to deploy, switch the Firestore driver config in the library subfolder and uncomment the authentication token check inside the middleware routes.</p>
-                </div>
-              </div>
-
-            </div>
+          {activeTab === 'expense-tracker' && isStaffRole(user.role) && (
+            <ExpenseTracker
+              reports={reports.filter((r) => r.staffId === user.id)}
+              onInspectReport={handleInspectReport}
+            />
           )}
 
           {/* ========================================================
@@ -771,6 +596,12 @@ export default function DashboardPage() {
 
 
 
+      {/* B. Create User Modal */}
+      {showCreateUserModal && (
+        <CreateUserModal onClose={() => setShowCreateUserModal(false)} />
+      )}
+
     </div>
   );
 }
+ 

@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { MarketReport, User } from '../types';
 import { useReports } from '../context/ReportContext';
+import { isAdminRole } from '../lib/roles';
 
 interface ReportModalProps {
   report: MarketReport | null;
@@ -17,7 +18,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
 
   if (!report || !currentUser) return null;
 
-  const isAuthorized = currentUser.role === 'admin' || report.staffId === currentUser.id;
+  const isAuthorized = isAdminRole(currentUser.role) || report.staffId === currentUser.id;
   if (!isAuthorized) return null;
 
   const handleReview = async (status: 'Approved' | 'Rejected') => {
@@ -89,62 +90,172 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
               </div>
             </div>
 
-            {/* Row 3: Institution details */}
-            <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
-              <span className="report-detail-label">Institution Details</span>
-              <div className="metrics-block-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-                <div className="metric-mini-card">
-                  <div className="metric-mini-label">Name</div>
-                  <div className="metric-mini-val" style={{ fontSize: '0.95rem' }}>{report.institutionName}</div>
-                </div>
-                <div className="metric-mini-card">
-                  <div className="metric-mini-label">Location / City</div>
-                  <div className="metric-mini-val">{report.location}</div>
-                </div>
-                <div className="metric-mini-card">
-                  <div className="metric-mini-label">Final Year Students</div>
-                  <div className="metric-mini-val" style={{ fontFamily: 'var(--font-mono)' }}>{report.finalYearStudentsCount}</div>
-                </div>
-                <div className="metric-mini-card">
-                  <div className="metric-mini-label">Head of Institution</div>
-                  <div className="metric-mini-val">{report.headOfInstitution || 'N/A'}</div>
-                </div>
-                <div className="metric-mini-card">
-                  <div className="metric-mini-label">Head Contact</div>
-                  <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.contactNumber || 'N/A'}</div>
-                </div>
-              </div>
-            </div>
+            {/* Dynamic Rendering Based on Entity Type */}
+            {(() => {
+              const isHospitalReport = report.activityType?.includes('Hospital') || !!report.hospitalName || report.meetingType === 'Hospital';
+              const isConferenceReport = report.activityType?.includes('Conference') || !!report.conferenceName || report.meetingType === 'Conference';
 
-            {/* Row 4: SPOC details */}
-            <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
-              <span className="report-detail-label">Single Point of Contact (SPOC)</span>
-              <div className="metrics-block-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-                <div className="metric-mini-card">
-                  <div className="metric-mini-label">SPOC Name</div>
-                  <div className="metric-mini-val">{report.spocName || 'N/A'}</div>
-                </div>
-                <div className="metric-mini-card">
-                  <div className="metric-mini-label">SPOC Contact</div>
-                  <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.spocContact || 'N/A'}</div>
-                </div>
-                <div className="metric-mini-card">
-                  <div className="metric-mini-label">SPOC Email</div>
-                  <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.spocEmail || 'N/A'}</div>
-                </div>
-              </div>
-            </div>
+              if (isHospitalReport) {
+                return (
+                  <>
+                    {/* Row 3: Hospital details */}
+                    <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
+                      <span className="report-detail-label">Hospital Details</span>
+                      <div className="metrics-block-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Name</div>
+                          <div className="metric-mini-val" style={{ fontSize: '0.95rem' }}>{report.hospitalName}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Location / City</div>
+                          <div className="metric-mini-val">{report.location}</div>
+                        </div>
+                        {report.numberOfBeds !== undefined && (
+                          <div className="metric-mini-card">
+                            <div className="metric-mini-label">Number of Beds</div>
+                            <div className="metric-mini-val" style={{ fontFamily: 'var(--font-mono)' }}>{report.numberOfBeds}</div>
+                          </div>
+                        )}
+                        {report.numberOfEmployees !== undefined && (
+                          <div className="metric-mini-card">
+                            <div className="metric-mini-label">Total Staff</div>
+                            <div className="metric-mini-val" style={{ fontFamily: 'var(--font-mono)' }}>{report.numberOfEmployees}</div>
+                          </div>
+                        )}
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Head of Hospital</div>
+                          <div className="metric-mini-val">{report.headOfHospital || 'N/A'}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Hospital Contact</div>
+                          <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.contactNumber || 'N/A'}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 4: Hospital SPOC details */}
+                    <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
+                      <span className="report-detail-label">Single Point of Contact (HR / SPOC)</span>
+                      <div className="metrics-block-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">HR Stakeholder Name</div>
+                          <div className="metric-mini-val">{report.headOfHr || 'N/A'}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">HR Contact</div>
+                          <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.hrContact || 'N/A'}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">HR Email</div>
+                          <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.hrEmail || 'N/A'}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              } else if (isConferenceReport) {
+                return (
+                  <>
+                    {/* Row 3: Conference details */}
+                    <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
+                      <span className="report-detail-label">Conference Details</span>
+                      <div className="metrics-block-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Conference Name</div>
+                          <div className="metric-mini-val" style={{ fontSize: '0.95rem' }}>{report.conferenceName}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Location</div>
+                          <div className="metric-mini-val">{report.location}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Target Professionals</div>
+                          <div className="metric-mini-val">{report.targetProfessionals || 'N/A'}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Expected Participants</div>
+                          <div className="metric-mini-val" style={{ fontFamily: 'var(--font-mono)' }}>{report.numberOfParticipants || 'N/A'}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              } else {
+                return (
+                  <>
+                    {/* Row 3: Institution details */}
+                    <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
+                      <span className="report-detail-label">Institution Details</span>
+                      <div className="metrics-block-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Name</div>
+                          <div className="metric-mini-val" style={{ fontSize: '0.95rem' }}>{report.institutionName}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Location / City</div>
+                          <div className="metric-mini-val">{report.location}</div>
+                        </div>
+                        {report.finalYearStudentsCount !== undefined && (
+                          <div className="metric-mini-card">
+                            <div className="metric-mini-label">Final Year Students</div>
+                            <div className="metric-mini-val" style={{ fontFamily: 'var(--font-mono)' }}>{report.finalYearStudentsCount}</div>
+                          </div>
+                        )}
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Head of Institution</div>
+                          <div className="metric-mini-val">{report.headOfInstitution || 'N/A'}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">Head Contact</div>
+                          <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.headContact || report.contactNumber || 'N/A'}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Row 4: Institution SPOC details */}
+                    <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
+                      <span className="report-detail-label">Single Point of Contact (SPOC)</span>
+                      <div className="metrics-block-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">SPOC Name</div>
+                          <div className="metric-mini-val">{report.spocName || 'N/A'}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">SPOC Contact</div>
+                          <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.spocContact || 'N/A'}</div>
+                        </div>
+                        <div className="metric-mini-card">
+                          <div className="metric-mini-label">SPOC Email</div>
+                          <div className="metric-mini-val" style={{ fontSize: '0.85rem' }}>{report.spocEmail || 'N/A'}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                );
+              }
+            })()}
 
             {/* Row 5: Notes & Observations */}
             <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
-              <span className="report-detail-label">Notes & Observations</span>
+              <span className="report-detail-label">Marketing Observations & Notes</span>
               <div className="report-detail-block-content" style={{ borderLeft: '3px solid var(--primary)' }}>
-                {report.notes || 'No notes compiled.'}
+                {report.marketingObservation || report.notes || 'No observations compiled.'}
               </div>
             </div>
 
+            {/* Row 5b: Financials */}
+            {report.costOfVisit !== undefined && (
+              <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
+                <span className="report-detail-label">Cost of Visit</span>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--bg-sidebar)', padding: '10px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-muted)', color: 'var(--text-main)', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>
+                  <span style={{ color: 'var(--primary)' }}>$</span>
+                  {report.costOfVisit}
+                </div>
+              </div>
+            )}
+
             {/* Timeline - Admin Only */}
-            {currentUser.role === 'admin' && (
+            {isAdminRole(currentUser.role) && (
               <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
                 <span className="report-detail-label">Timeline Tracking</span>
                 <div className="activity-list" style={{ marginTop: '8px', backgroundColor: 'var(--bg-sidebar)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-muted)' }}>
@@ -165,7 +276,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
             )}
 
             {/* Review feedback */}
-            {currentUser.role === 'admin' && report.status === 'Pending' ? (
+            {isAdminRole(currentUser.role) && report.status === 'Pending' ? (
               <div className="report-detail-block admin-feedback-box" style={{ gridColumn: 'span 2' }}>
                 <span className="report-detail-label">Review Feedback Comments</span>
                 <textarea
@@ -201,7 +312,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
             Close
           </button>
           
-          {currentUser.role === 'admin' && report.status === 'Pending' && (
+          {isAdminRole(currentUser.role) && report.status === 'Pending' && (
             <>
               <button 
                 className="btn btn-danger" 

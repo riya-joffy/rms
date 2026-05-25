@@ -1,4 +1,4 @@
-import { User, MarketReport, ActivityLog, Notification, DashboardStats } from '../../types';
+import { User, MarketReport, ActivityLog, Notification, DashboardStats, Organization } from '../../types';
 import { db } from './firebase';
 import { 
   collection, 
@@ -12,11 +12,15 @@ import {
   orderBy, 
   limit, 
   setDoc,
-  serverTimestamp 
+  onSnapshot,
+  type QueryDocumentSnapshot,
+  type DocumentData,
 } from 'firebase/firestore';
+import { isAdminRole, resolveUserRole } from '../roles';
+import { createAuthUser } from './createAuthUser';
 
 // Helper to determine if real Firebase is configured
-const isFirebaseActive = (): boolean => {
+export const isFirebaseActive = (): boolean => {
   if (typeof window === 'undefined') return false;
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
   return !!apiKey && apiKey !== 'YOUR_API_KEY_HERE';
@@ -25,8 +29,6 @@ const isFirebaseActive = (): boolean => {
 // ==========================================
 // 1. Initial Mock / Seed Data
 // ==========================================
-
-const ALLOWED_USER_EMAILS = ['riyajoffy1@gmail.com', 'zandrakanja@gmail.com'];
 
 const DEFAULT_USERS: User[] = [
   {
@@ -72,6 +74,7 @@ const DEFAULT_REPORTS: MarketReport[] = [
     spocContact: '+1 555-0188',
     spocEmail: 'jsmith@cityhospital.org',
     notes: 'Conducted a physical walkthrough and presentation. Spoke to final year medical students. High level of interest in operational programs. Recommended immediate follow-up contract dispatch.',
+    costOfVisit: 485,
     dateTime: '2026-05-20T10:00',
     feedback: 'Excellent work Zandra. Program dispatched and pilot schedule approved.',
     attachments: [
@@ -101,6 +104,7 @@ const DEFAULT_REPORTS: MarketReport[] = [
     spocContact: '+1 555-0212',
     spocEmail: 'erostova@statemed.edu',
     notes: 'Virtual seminar conducted on RMS procedures. Over 200 medical students attended and filled the feedback. Requesting onboarding details for final year candidates.',
+    costOfVisit: 120,
     dateTime: '2026-05-21T08:00',
     attachments: [],
     history: [
@@ -126,6 +130,7 @@ const DEFAULT_REPORTS: MarketReport[] = [
     spocContact: '+1 555-0301',
     spocEmail: 'jwilson@graceclinic.org',
     notes: 'Brief telephone sync on student rotation slots. Draft saved. Plan to finalize physical visit details and numbers tomorrow.',
+    costOfVisit: 45,
     dateTime: '2026-05-22T14:00',
     attachments: [],
     history: [
@@ -155,18 +160,7 @@ const DEFAULT_LOGS: ActivityLog[] = [
   }
 ];
 
-const DEFAULT_NOTIFICATIONS: Notification[] = [
-  {
-    id: 'nt-1',
-    userId: 'S-201',
-    title: 'Report Approved',
-    message: 'Your report REP-2026-001 has been approved by Admin Eleanor Vance.',
-    timestamp: '2026-05-18T17:30:00Z',
-    read: false,
-    type: 'success',
-    reportId: 'REP-2026-001'
-  }
-];
+const DEFAULT_NOTIFICATIONS: Notification[] = [];
 
 // Helper to initialize and retrieve local storage keys
 const getStorageItem = <T>(key: string, defaultValue: T): T => {
@@ -193,6 +187,8 @@ const KEYS = {
   REPORTS: 'rms_db_reports',
   LOGS: 'rms_db_logs',
   NOTIFICATIONS: 'rms_db_notifications',
+  ORGANIZATIONS: 'rms_db_organizations',
+  CREDENTIALS: 'rms_user_credentials',
 };
 
 // Cached values for live queries (sync context)
@@ -200,24 +196,153 @@ let liveReportsCache: MarketReport[] = [];
 let liveUsersCache: User[] = [];
 let liveLogsCache: ActivityLog[] = [];
 let liveNotificationsCache: Notification[] = [];
+let liveOrganizationsCache: Organization[] = [];
+
+const mapReportDoc = (snap: QueryDocumentSnapshot<DocumentData>): MarketReport => {
+  const data = snap.data() as MarketReport;
+  return { ...data, id: data.id || snap.id };
+};
+
+const mapUserDoc = (snap: QueryDocumentSnapshot<DocumentData>): User => {
+  const data = snap.data() as User;
+  return {
+    ...data,
+    id: data.id || snap.id,
+    role: resolveUserRole(data.role, data.email),
+  };
+};
+
+const upsertUserInCache = (user: User) => {
+  const idx = liveUsersCache.findIndex((u) => u.id === user.id);
+  if (idx >= 0) {
+    const next = [...liveUsersCache];
+    next[idx] = user;
+    liveUsersCache = next;
+  } else {
+    liveUsersCache = [user, ...liveUsersCache];
+  }
+};
+
+const upsertReportInCache = (report: MarketReport) => {
+  const idx = liveReportsCache.findIndex((r) => r.id === report.id);
+  if (idx >= 0) {
+    const next = [...liveReportsCache];
+    next[idx] = report;
+    liveReportsCache = next;
+  } else {
+    liveReportsCache = [report, ...liveReportsCache];
+  }
+};
 
 // ==========================================
 // 2. Database Services (Direct API)
 // ==========================================
 
 export const dbService = {
+  // --- ORGANIZATIONS ---
+  getOrganizations: (): Organization[] => {
+    if (!isFirebaseActive()) {
+      return getStorageItem(KEYS.ORGANIZATIONS, []);
+    }
+    return liveOrganizationsCache;
+  },
+
+  addOrganization: async (orgData: Omit<Organization, 'id'>): Promise<Organization> => {
+    if (!isFirebaseActive()) {
+      const orgs = dbService.getOrganizations();
+      const existing = orgs.find(o => o.name.toLowerCase() === orgData.name.toLowerCase() && o.type === orgData.type);
+      if (existing) return existing;
+
+      const newOrg: Organization = {
+        ...orgData,
+        id: `org-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+      };
+      orgs.push(newOrg);
+      setStorageItem(KEYS.ORGANIZATIONS, orgs);
+      return newOrg;
+    }
+
+    const orgsCollectionRef = collection(db, 'organizations');
+    const existing = liveOrganizationsCache.find(o => o.name.toLowerCase() === orgData.name.toLowerCase() && o.type === orgData.type);
+    if (existing) return existing;
+
+    const docRef = await addDoc(orgsCollectionRef, orgData);
+    await updateDoc(doc(db, 'organizations', docRef.id), { id: docRef.id });
+    
+    return {
+      ...orgData,
+      id: docRef.id
+    };
+  },
+
   // --- USERS ---
   getUsers: (): User[] => {
-    const allowedFilter = (user: User) => ALLOWED_USER_EMAILS.includes(user.email.toLowerCase());
+    if (!isFirebaseActive()) {
+      return getStorageItem(KEYS.USERS, DEFAULT_USERS);
+    }
+    return liveUsersCache;
+  },
+
+  addUser: async (userData: Omit<User, 'id'>, adminName: string, password: string): Promise<User> => {
+    const emailKey = userData.email.trim().toLowerCase();
 
     if (!isFirebaseActive()) {
-      const storedUsers = getStorageItem(KEYS.USERS, DEFAULT_USERS);
-      const filteredUsers = (storedUsers ?? DEFAULT_USERS).filter(allowedFilter);
-      return filteredUsers.length > 0 ? filteredUsers : DEFAULT_USERS;
+      const users = dbService.getUsers();
+      if (users.some((u) => u.email.toLowerCase() === emailKey)) {
+        throw new Error('A user with this email already exists.');
+      }
+
+      const newUser: User = {
+        ...userData,
+        email: userData.email.trim(),
+        role: resolveUserRole(userData.role, userData.email),
+        id: `U-${Date.now()}`,
+      };
+      users.push(newUser);
+      setStorageItem(KEYS.USERS, users);
+
+      const credentials = getStorageItem<Record<string, string>>(KEYS.CREDENTIALS, {});
+      credentials[emailKey] = password;
+      setStorageItem(KEYS.CREDENTIALS, credentials);
+
+      await dbService.addLog({
+        userId: 'A-101',
+        userName: adminName,
+        userRole: 'admin',
+        action: 'Created User',
+        details: `Created new ${newUser.role} account for ${newUser.name}.`,
+      });
+
+      return newUser;
     }
-    // Return local cache when queries are active in context
-    const cachedUsers = liveUsersCache.length > 0 ? liveUsersCache : DEFAULT_USERS;
-    return cachedUsers.filter(allowedFilter);
+
+    const existing = dbService.getUsers().find((u) => u.email.toLowerCase() === emailKey);
+    if (existing) {
+      throw new Error('A user with this email already exists.');
+    }
+
+    console.log('[DbService] Creating Firebase Auth user and Firestore profile...');
+    const uid = await createAuthUser(userData.email, password);
+
+    const newUser: User = {
+      ...userData,
+      id: uid,
+      email: userData.email.trim(),
+      role: resolveUserRole(userData.role, userData.email),
+    };
+
+    await setDoc(doc(db, 'users', uid), newUser);
+    upsertUserInCache(newUser);
+
+    await dbService.addLog({
+      userId: 'A-101',
+      userName: adminName,
+      userRole: 'admin',
+      action: 'Created User',
+      details: `Created new ${newUser.role} account for ${newUser.name} (Auth UID: ${uid}).`,
+    });
+
+    return newUser;
   },
 
   updateUserStatus: (userId: string, status: 'active' | 'suspended', adminName: string): User[] => {
@@ -238,14 +363,6 @@ export const dbService = {
           details: `${status === 'active' ? 'Activated' : 'Suspended'} staff account of ${user.name}.`
         });
 
-        dbService.addNotification({
-          userId: user.id,
-          title: status === 'active' ? 'Account Re-activated' : 'Account Suspended',
-          message: status === 'active' 
-            ? `Your staff account has been re-activated by ${adminName}.`
-            : `Your staff account has been suspended by ${adminName}. Please contact support.`,
-          type: status === 'active' ? 'success' : 'error'
-        });
       }
       return users;
     }
@@ -263,14 +380,6 @@ export const dbService = {
         details: `${status === 'active' ? 'Activated' : 'Suspended'} account of user UID: ${userId}.`
       });
 
-      dbService.addNotification({
-        userId,
-        title: status === 'active' ? 'Account Active' : 'Account Suspended',
-        message: status === 'active' 
-          ? `Your staff profile was re-activated by admin ${adminName}.`
-          : `Your staff profile was suspended by admin ${adminName}.`,
-        type: status === 'active' ? 'success' : 'error'
-      });
     });
 
     // In live mode, UI sync is driven by the snapshot listeners in Context, return current cache
@@ -282,13 +391,13 @@ export const dbService = {
     if (!isFirebaseActive()) {
       return getStorageItem(KEYS.REPORTS, DEFAULT_REPORTS);
     }
-    return liveReportsCache.length > 0 ? liveReportsCache : DEFAULT_REPORTS;
+    return liveReportsCache;
   },
 
-  addReport: (
+  addReport: async (
     reportData: Omit<MarketReport, 'id' | 'history' | 'feedback'> & { id?: string; status?: 'Pending' | 'Draft' },
     staffName: string
-  ): MarketReport => {
+  ): Promise<MarketReport> => {
     const isEdit = !!reportData.id;
     const finalStatus = reportData.status || 'Pending';
 
@@ -370,73 +479,62 @@ export const dbService = {
         details: `${finalStatus === 'Draft' ? 'Saved draft' : 'Submitted report'} ${finalReport.id} for ${reportData.institutionName} in ${reportData.location}.`
       });
 
-      if (finalStatus !== 'Draft') {
-        const admins = dbService.getUsers().filter(u => u.role === 'admin');
-        admins.forEach(admin => {
-          dbService.addNotification({
-            userId: admin.id,
-            title: 'New Report Submitted',
-            message: `${staffName} submitted report ${finalReport.id} for ${reportData.institutionName}.`,
-            type: 'info',
-            reportId: finalReport.id
-          });
-        });
-      }
-
       return finalReport;
     }
 
     // LIVE FIRESTORE IMPLEMENTATION
     console.log("[DbService] Upserting report in live Firestore...");
-    const reportCollectionRef = collection(db, 'reports');
-    const tempId = reportData.id || `REP-${Date.now().toString().slice(-6)}`;
-
-    const firestoreReportDoc = {
-      ...reportData,
+    const historyEntry = {
+      id: `h-${Date.now()}`,
       status: finalStatus,
-      history: [
-        {
-          id: `h-${Date.now()}`,
-          status: finalStatus,
-          date: new Date().toISOString(),
-          comment: isEdit 
-            ? (finalStatus === 'Draft' ? 'Draft report updated in Firestore.' : 'Draft report finalized and submitted to Firestore.')
-            : (finalStatus === 'Draft' ? 'Draft report initialized in Firestore.' : 'Report compiled and uploaded directly to Firestore.'),
-          user: staffName
-        }
-      ]
+      date: new Date().toISOString(),
+      comment: isEdit
+        ? (finalStatus === 'Draft' ? 'Draft report updated.' : 'Draft report finalized and submitted.')
+        : (finalStatus === 'Draft' ? 'Draft saved.' : 'Report created and submitted for review.'),
+      user: staffName,
     };
 
-    if (isEdit) {
-      const docRef = doc(db, 'reports', reportData.id!);
-      updateDoc(docRef, firestoreReportDoc).then(() => {
-        dbService.addLog({
-          userId: reportData.staffId,
-          userName: staffName,
-          userRole: 'staff',
-          action: finalStatus === 'Draft' ? 'Saved Draft' : 'Submitted Report',
-          details: `Updated Firestore report ${reportData.id} (${finalStatus}) for ${reportData.institutionName}.`
-        });
-      });
+    let finalReport: MarketReport;
+
+    if (isEdit && reportData.id) {
+      const docRef = doc(db, 'reports', reportData.id);
+      const existingSnap = await getDoc(docRef);
+      const existingHistory = existingSnap.exists()
+        ? ((existingSnap.data() as MarketReport).history ?? [])
+        : [];
+
+      finalReport = {
+        ...(existingSnap.exists() ? (existingSnap.data() as MarketReport) : {}),
+        ...reportData,
+        id: reportData.id,
+        status: finalStatus,
+        history: [...existingHistory, historyEntry],
+      } as MarketReport;
+
+      await setDoc(docRef, finalReport, { merge: true });
     } else {
-      addDoc(reportCollectionRef, firestoreReportDoc).then((docRef) => {
-        updateDoc(doc(db, 'reports', docRef.id), { id: docRef.id });
-        dbService.addLog({
-          userId: reportData.staffId,
-          userName: staffName,
-          userRole: 'staff',
-          action: finalStatus === 'Draft' ? 'Saved Draft' : 'Submitted Report',
-          details: `Submitted database report ${docRef.id} (${finalStatus}) for ${reportData.institutionName}.`
-        });
-      });
+      const newDocRef = doc(collection(db, 'reports'));
+      finalReport = {
+        ...reportData,
+        id: newDocRef.id,
+        status: finalStatus,
+        history: [historyEntry],
+      } as MarketReport;
+
+      await setDoc(newDocRef, finalReport);
     }
 
-    return {
-      ...reportData,
-      id: tempId,
-      status: finalStatus,
-      history: []
-    } as MarketReport;
+    upsertReportInCache(finalReport);
+
+    await dbService.addLog({
+      userId: reportData.staffId,
+      userName: staffName,
+      userRole: 'staff',
+      action: finalStatus === 'Draft' ? 'Saved Draft' : 'Submitted Report',
+      details: `${finalStatus === 'Draft' ? 'Saved draft' : 'Submitted report'} ${finalReport.id} for ${reportData.institutionName || reportData.hospitalName || reportData.conferenceName || 'visit'}.`,
+    });
+
+    return finalReport;
   },
 
   updateReportStatus: (
@@ -474,14 +572,6 @@ export const dbService = {
         details: `${status === 'Approved' ? 'Approved' : 'Rejected'} report ${reportId} from ${report.staffName}.`
       });
 
-      dbService.addNotification({
-        userId: report.staffId,
-        title: `Report ${status}`,
-        message: `Your report ${reportId} was ${status.toLowerCase()} by ${adminName}.`,
-        type: status === 'Approved' ? 'success' : 'error',
-        reportId
-      });
-
       return report;
     }
 
@@ -515,13 +605,6 @@ export const dbService = {
           details: `Audited and ${status} report document ID ${reportId}.`
         });
 
-        dbService.addNotification({
-          userId: report.staffId,
-          title: `Report ${status}`,
-          message: `Your report document ${reportId} review status: ${status}. Feedback: "${feedback}"`,
-          type: status === 'Approved' ? 'success' : 'error',
-          reportId
-        });
       });
     });
 
@@ -670,7 +753,7 @@ export const dbService = {
     const reportsList = dbService.getReports();
     const usersList = dbService.getUsers();
     
-    const activeStaff = usersList.filter(u => u.role === 'staff' && u.status === 'active').length;
+    const activeStaff = usersList.filter(u => !isAdminRole(u.role) && u.status === 'active').length;
     const total = reportsList.length;
     const pending = reportsList.filter(r => r.status === 'Pending').length;
     const approved = reportsList.filter(r => r.status === 'Approved').length;
@@ -692,60 +775,70 @@ export const dbService = {
     };
   },
 
+  /** Real-time (or local) user directory — used by admin Staff Directory. */
+  subscribeUsers: (onUsersChange: (users: User[]) => void): (() => void) => {
+    if (!isFirebaseActive()) {
+      onUsersChange(dbService.getUsers());
+      return () => {};
+    }
+
+    const unsub = onSnapshot(collection(db, 'users'), (snap) => {
+      const items = snap.docs.map(mapUserDoc);
+      liveUsersCache = items;
+      onUsersChange(items);
+    });
+
+    return unsub;
+  },
+
   // --- LIVE SNAPSHOT INJECTORS (Call from Providers for Real-time listeners) ---
   syncLiveCollections: (
     onReportsChange: (reps: MarketReport[]) => void,
     onUsersChange: (usrs: User[]) => void,
     onLogsChange: (logs: ActivityLog[]) => void,
-    onNotificationsChange: (notifs: Notification[]) => void
+    onOrganizationsChange: (orgs: Organization[]) => void
   ): () => void => {
     if (!isFirebaseActive()) {
-      return () => {}; // No-op in mock
+      return () => {};
     }
 
-    console.log("[DbService] Registering real-time listeners on live Firestore collections...");
-    
-    // In actual production, developers instantiate Firestore onSnapshot listeners here:
-    // 
-    // const unsubReports = onSnapshot(query(collection(db, 'reports'), orderBy('date', 'desc')), (snap) => {
-    //   const reps: MarketReport[] = [];
-    //   snap.forEach(d => reps.push(d.data() as MarketReport));
-    //   liveReportsCache = reps;
-    //   onReportsChange(reps);
-    // });
-    //
-    // Repeat for users, logs, notifications, and return a merged unsub function.
+    console.log("[DbService] Registering real-time Firestore listeners...");
 
-    // Standard fallback listeners to fetch initial items in live mode
-    getDocs(collection(db, 'reports')).then((snap) => {
-      const items: MarketReport[] = [];
-      snap.forEach(d => items.push(d.data() as MarketReport));
+    const unsubReports = onSnapshot(collection(db, 'reports'), (snap) => {
+      const items = snap.docs.map(mapReportDoc);
       liveReportsCache = items;
       onReportsChange(items);
     });
 
-    getDocs(collection(db, 'users')).then((snap) => {
-      const items: User[] = [];
-      snap.forEach(d => items.push(d.data() as User));
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      const items = snap.docs.map(mapUserDoc);
       liveUsersCache = items;
       onUsersChange(items);
     });
 
-    getDocs(collection(db, 'activity_logs')).then((snap) => {
-      const items: ActivityLog[] = [];
-      snap.forEach(d => items.push(d.data() as ActivityLog));
+    const unsubLogs = onSnapshot(collection(db, 'activity_logs'), (snap) => {
+      const items: ActivityLog[] = snap.docs.map((d) => {
+        const data = d.data() as ActivityLog;
+        return { ...data, id: data.id || d.id };
+      });
       liveLogsCache = items;
       onLogsChange(items);
     });
 
-    getDocs(collection(db, 'notifications')).then((snap) => {
-      const items: Notification[] = [];
-      snap.forEach(d => items.push(d.data() as Notification));
-      liveNotificationsCache = items;
-      onNotificationsChange(items);
+    const unsubOrganizations = onSnapshot(collection(db, 'organizations'), (snap) => {
+      const items: Organization[] = snap.docs.map((d) => {
+        const data = d.data() as Organization;
+        return { ...data, id: data.id || d.id };
+      });
+      liveOrganizationsCache = items;
+      onOrganizationsChange(items);
     });
 
     return () => {
+      unsubReports();
+      unsubUsers();
+      unsubLogs();
+      unsubOrganizations();
       console.log("[DbService] Unsubscribed real-time queries.");
     };
   }
