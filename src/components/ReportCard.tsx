@@ -47,6 +47,12 @@ export const ReportCard: React.FC<ReportCardProps> = ({
           <span className="rc-value">{entityName}</span>
         </div>
         <div className="rc-row">
+          <span className="rc-label">Meeting Date:</span>
+          <span className="rc-value" style={{ fontWeight: '700', color: 'var(--text-main)' }}>
+            {report.dateOfActivity || 'N/A'}
+          </span>
+        </div>
+        <div className="rc-row">
           <span className="rc-label">Submitted:</span>
           <span className="rc-value">{report.date}</span>
         </div>

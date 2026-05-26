@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MarketReport, Organization } from '../types';
 import { useReports } from '../context/ReportContext';
+import { useAuth } from '../context/AuthContext';
 
 interface CreateReportFormProps {
   onSuccess: () => void;
@@ -11,6 +12,7 @@ interface CreateReportFormProps {
 }
 
 const ACTIVITY_TYPES = [
+  'Meeting with Organisation',
   'Meetings with Institutes',
   'Follow up with Institutes',
   'Campaigns Conducted',
@@ -20,7 +22,31 @@ const ACTIVITY_TYPES = [
 ];
 
 export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, onCancel, reportToEdit }) => {
-  const { createReport, organizations, addOrganization } = useReports();
+  const { reports, createReport, organizations, addOrganization, updateOrganization } = useReports();
+  const { user } = useAuth();
+  const isStaff = user?.role !== 'admin';
+
+  const getDaysDifference = (dateStr?: string) => {
+    if (!dateStr) return { diffDays: null, isValid: false, status: 'empty' };
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return { diffDays: null, isValid: false, status: 'invalid' };
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const meetingDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    meetingDate.setHours(0, 0, 0, 0);
+    
+    const diffTime = today.getTime() - meetingDate.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) {
+      return { diffDays, isValid: false, status: 'future' };
+    } else if (diffDays > 2) {
+      return { diffDays, isValid: false, status: 'expired' };
+    }
+    return { diffDays, isValid: true, status: 'valid' };
+  };
 
   // Unified form data
   const [formData, setFormData] = useState<Partial<MarketReport>>({
@@ -32,6 +58,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
   const [searchTerm, setSearchTerm] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isAutoFilled, setIsAutoFilled] = useState(false);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileExpanded, setProfileExpanded] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -71,6 +99,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
         setSearchTerm(reportToEdit.institutionName || '');
       }
       setIsAutoFilled(!!(reportToEdit.institutionName || reportToEdit.hospitalName));
+      setProfileExpanded(false);
+      setIsEditingProfile(false);
     } else {
       setFormData({ 
         activityType: ACTIVITY_TYPES[0], 
@@ -79,6 +109,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
       });
       setSearchTerm('');
       setIsAutoFilled(false);
+      setProfileExpanded(false);
+      setIsEditingProfile(false);
     }
   }, [reportToEdit]);
 
@@ -97,7 +129,9 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
     const newType = e.target.value;
     
     let defaultMeetingType: 'Institution' | 'Hospital' = 'Institution';
-    if (newType.includes('Hospital')) {
+    if (newType === 'Meeting with Organisation') {
+      defaultMeetingType = (formData.meetingType as 'Institution' | 'Hospital') || 'Institution';
+    } else if (newType.includes('Hospital')) {
       defaultMeetingType = 'Hospital';
     } else if (newType.includes('Institute') || newType.includes('Campaign')) {
       defaultMeetingType = 'Institution';
@@ -112,6 +146,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
     });
     setSearchTerm('');
     setIsAutoFilled(false);
+    setProfileExpanded(false);
+    setIsEditingProfile(false);
   };
 
   const handleMeetingTypeChange = (type: 'Institution' | 'Hospital') => {
@@ -139,6 +175,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
         numberOfEmployees: undefined
       }));
       setIsAutoFilled(false);
+      setProfileExpanded(false);
+      setIsEditingProfile(false);
       setIsTransitioning(false);
     }, 200);
   };
@@ -156,6 +194,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
     setSearchTerm(org.name);
     setShowSuggestions(false);
     setIsAutoFilled(true);
+    setProfileExpanded(false);
+    setIsEditingProfile(false);
 
     const updates: Partial<MarketReport> = { location: org.location };
     
@@ -181,39 +221,65 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
     setFormData(prev => ({ ...prev, ...updates }));
   };
 
-  const checkAndSaveOrganization = () => {
+  const checkAndSaveOrganization = async (): Promise<string | undefined> => {
     const orgName = searchTerm.trim();
-    if (!orgName) return;
+    if (!orgName) return undefined;
 
     const orgType = (formData.meetingType as 'Institution' | 'Hospital') || 'Institution';
     const existing = organizations.find(o => o.name.toLowerCase() === orgName.toLowerCase() && o.type === orgType);
     
-    if (!existing) {
-      const newOrg: Omit<Organization, 'id'> = {
-        name: orgName,
-        type: orgType,
+    if (existing) {
+      // Update existing organization with any edited fields
+      const updatedOrg: Partial<Organization> = {
         location: formData.location || '',
       };
-
+      
       if (orgType === 'Institution') {
-        newOrg.finalYearStudentsCount = formData.finalYearStudentsCount;
-        newOrg.headOfInstitution = formData.headOfInstitution;
-        newOrg.headContact = formData.headContact;
-        newOrg.spocName = formData.spocName;
-        newOrg.spocContact = formData.spocContact;
-        newOrg.spocEmail = formData.spocEmail;
+        updatedOrg.finalYearStudentsCount = formData.finalYearStudentsCount;
+        updatedOrg.headOfInstitution = formData.headOfInstitution;
+        updatedOrg.headContact = formData.headContact;
+        updatedOrg.spocName = formData.spocName;
+        updatedOrg.spocContact = formData.spocContact;
+        updatedOrg.spocEmail = formData.spocEmail;
       } else if (orgType === 'Hospital') {
-        newOrg.numberOfBeds = formData.numberOfBeds;
-        newOrg.numberOfEmployees = formData.numberOfEmployees;
-        newOrg.headOfHospital = formData.headOfHospital;
-        newOrg.contactNumber = formData.contactNumber;
-        newOrg.headOfHr = formData.headOfHr;
-        newOrg.hrContact = formData.hrContact;
-        newOrg.hrEmail = formData.hrEmail;
+        updatedOrg.numberOfBeds = formData.numberOfBeds;
+        updatedOrg.numberOfEmployees = formData.numberOfEmployees;
+        updatedOrg.headOfHospital = formData.headOfHospital;
+        updatedOrg.contactNumber = formData.contactNumber;
+        updatedOrg.headOfHr = formData.headOfHr;
+        updatedOrg.hrContact = formData.hrContact;
+        updatedOrg.hrEmail = formData.hrEmail;
       }
-
-      addOrganization(newOrg);
+      
+      await updateOrganization(existing.id, updatedOrg);
+      return existing.id;
     }
+
+    const newOrg: Omit<Organization, 'id'> = {
+      name: orgName,
+      type: orgType,
+      location: formData.location || '',
+    };
+
+    if (orgType === 'Institution') {
+      newOrg.finalYearStudentsCount = formData.finalYearStudentsCount;
+      newOrg.headOfInstitution = formData.headOfInstitution;
+      newOrg.headContact = formData.headContact;
+      newOrg.spocName = formData.spocName;
+      newOrg.spocContact = formData.spocContact;
+      newOrg.spocEmail = formData.spocEmail;
+    } else if (orgType === 'Hospital') {
+      newOrg.numberOfBeds = formData.numberOfBeds;
+      newOrg.numberOfEmployees = formData.numberOfEmployees;
+      newOrg.headOfHospital = formData.headOfHospital;
+      newOrg.contactNumber = formData.contactNumber;
+      newOrg.headOfHr = formData.headOfHr;
+      newOrg.hrContact = formData.hrContact;
+      newOrg.hrEmail = formData.hrEmail;
+    }
+
+    const saved = await addOrganization(newOrg);
+    return saved?.id;
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -221,6 +287,7 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
     setSearchTerm(value);
     setShowSuggestions(true);
     setIsAutoFilled(false);
+    setProfileExpanded(false);
     
     if (formData.meetingType === 'Hospital') {
       handleChange('hospitalName', value);
@@ -238,6 +305,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
       });
       setSearchTerm('');
       setIsAutoFilled(false);
+      setProfileExpanded(false);
+      setIsEditingProfile(false);
     }
   };
 
@@ -247,11 +316,30 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
       return;
     }
     
-    checkAndSaveOrganization();
+    // Policy Check: Staff members can only submit reports within two days of the meeting or activity
+    if (status === 'Pending') {
+      if (!formData.dateOfActivity) {
+        alert('Date of Meeting / Activity is required to submit a report.');
+        return;
+      }
+      
+      const { isValid, diffDays, status: dateStatus } = getDaysDifference(formData.dateOfActivity);
+      if (isStaff && !isValid) {
+        if (dateStatus === 'future') {
+          alert('Error: The meeting or activity date cannot be in the future.');
+        } else {
+          alert(`Error: Under corporate policy, staff members can only submit reports within 2 days of the meeting or activity. The selected meeting date occurred ${diffDays} days ago.`);
+        }
+        return;
+      }
+    }
+    
+    const orgId = await checkAndSaveOrganization();
 
     const isHospital = formData.meetingType === 'Hospital';
     const reportData = {
       ...formData,
+      organizationId: orgId,
       institutionName: isHospital ? undefined : searchTerm,
       hospitalName: isHospital ? searchTerm : undefined,
       id: reportToEdit?.id,
@@ -361,147 +449,351 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
               </div>
             </div>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
-              <label className="form-label">Location</label>
-              <div style={{ marginTop: '6px' }}>
-                <input 
-                  type="text"
-                  className="form-input"
-                  placeholder="Street address, City, Region..."
-                  value={formData.location || ''}
-                  onChange={(e) => handleChange('location', e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Dynamic Card 2: Strategic CRM Contacts & Profile Details */}
-        <div style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border-muted)',
-          borderRadius: 'var(--radius-lg)',
-          padding: '24px',
-          backdropFilter: 'var(--glass-filter)'
-        }}>
-          <h4 style={{ color: 'var(--primary)', marginBottom: '16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
-            CRM Stakeholder Directory
-          </h4>
-          
-          <div className="form-grid">
-            {/* Leadership Stakeholder */}
-            <div className="form-group">
-              <label className="form-label">{isHospital ? 'Head of Hospital' : 'Head of Institution'}</label>
-              <div style={{ marginTop: '6px' }}>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder={isHospital ? 'e.g. Dr. Sarah Connor' : 'e.g. Dean Arthur Pendelton'}
-                  value={isHospital ? (formData.headOfHospital || '') : (formData.headOfInstitution || '')} 
-                  onChange={e => handleChange(isHospital ? 'headOfHospital' : 'headOfInstitution', e.target.value)} 
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Leadership Contact details</label>
-              <div style={{ marginTop: '6px' }}>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="Primary phone or direct extension..."
-                  value={isHospital ? (formData.contactNumber || '') : (formData.headContact || '')} 
-                  onChange={e => handleChange(isHospital ? 'contactNumber' : 'headContact', e.target.value)} 
-                />
-              </div>
-            </div>
-
-            {/* SPOC Stakeholder */}
-            <div className="form-group">
-              <label className="form-label">{isHospital ? 'Head of HR / SPOC Name' : 'SPOC Name'}</label>
-              <div style={{ marginTop: '6px' }}>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="Single Point of Contact (SPOC) Name..."
-                  value={isHospital ? (formData.headOfHr || '') : (formData.spocName || '')} 
-                  onChange={e => handleChange(isHospital ? 'headOfHr' : 'spocName', e.target.value)} 
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">SPOC Contact Number</label>
-              <div style={{ marginTop: '6px' }}>
-                <input 
-                  type="text" 
-                  className="form-input" 
-                  placeholder="SPOC direct mobile number..."
-                  value={isHospital ? (formData.hrContact || '') : (formData.spocContact || '')} 
-                  onChange={e => handleChange(isHospital ? 'hrContact' : 'spocContact', e.target.value)} 
-                />
-              </div>
-            </div>
-
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
-              <label className="form-label">SPOC Email Address</label>
-              <div style={{ marginTop: '6px' }}>
-                <input 
-                  type="email" 
-                  className="form-input" 
-                  placeholder="spoc@organization.com"
-                  value={isHospital ? (formData.hrEmail || '') : (formData.spocEmail || '')} 
-                  onChange={e => handleChange(isHospital ? 'hrEmail' : 'spocEmail', e.target.value)} 
-                />
-              </div>
-            </div>
-
-            {/* Dynamic Metric Field depending on meeting type */}
-            {isHospital ? (
-              <>
-                <div className="form-group">
-                  <label className="form-label">Number of Beds</label>
-                  <div style={{ marginTop: '6px' }}>
-                    <input 
-                      type="number" 
-                      className="form-input" 
-                      placeholder="e.g. 250"
-                      value={formData.numberOfBeds || ''} 
-                      onChange={e => handleChange('numberOfBeds', e.target.value ? Number(e.target.value) : undefined)} 
-                    />
+            {isAutoFilled && (
+              <div style={{ 
+                gridColumn: 'span 2',
+                background: 'rgba(34, 197, 94, 0.04)',
+                border: '1px solid rgba(34, 197, 94, 0.25)',
+                borderRadius: 'var(--radius-md)',
+                padding: '16px',
+                marginTop: '8px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--success-text)', fontWeight: '700', fontSize: '0.9rem' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="3">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    Profile Loaded Successfully
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingProfile(!isEditingProfile)}
+                      style={{
+                        fontSize: '0.75rem',
+                        backgroundColor: isEditingProfile ? 'var(--primary)' : 'rgba(168, 85, 247, 0.08)',
+                        color: isEditingProfile ? '#ffffff' : 'var(--primary)',
+                        border: '1px solid var(--primary-glow)',
+                        padding: '4px 10px',
+                        borderRadius: 'var(--radius-sm)',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        transition: 'all var(--transition-fast)'
+                      }}
+                    >
+                      {isEditingProfile ? '✏️ Save Mode' : '✏️ Edit Profile'}
+                    </button>
+                    <span style={{ 
+                      fontSize: '0.65rem', 
+                      backgroundColor: 'rgba(168, 85, 247, 0.1)', 
+                      color: 'var(--primary)', 
+                      border: '1px solid var(--primary-glow)', 
+                      padding: '4px 8px', 
+                      borderRadius: 'var(--radius-sm)', 
+                      fontWeight: '600'
+                    }}>
+                      Previously Used
+                    </span>
                   </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Total Staff / Employees</label>
-                  <div style={{ marginTop: '6px' }}>
-                    <input 
-                      type="number" 
-                      className="form-input" 
-                      placeholder="e.g. 1500"
-                      value={formData.numberOfEmployees || ''} 
-                      onChange={e => handleChange('numberOfEmployees', e.target.value ? Number(e.target.value) : undefined)} 
-                    />
+
+                {isEditingProfile && (
+                  <div style={{
+                    fontSize: '0.8rem',
+                    color: 'var(--primary)',
+                    backgroundColor: 'rgba(168, 85, 247, 0.04)',
+                    border: '1px solid var(--primary-glow)',
+                    borderRadius: 'var(--radius-sm)',
+                    padding: '10px 14px',
+                    marginTop: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <circle cx="12" cy="12" r="10" />
+                      <line x1="12" y1="16" x2="12" y2="12" />
+                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                    </svg>
+                    <span>Editing Mode Active: Modifications to location and contacts will update this profile globally upon submission.</span>
                   </div>
-                </div>
-              </>
-            ) : (
+                )}
+
+                {!isEditingProfile && (
+                  <div 
+                    onClick={() => setProfileExpanded(!profileExpanded)}
+                    style={{
+                      cursor: 'pointer',
+                      padding: '10px 14px',
+                      backgroundColor: 'var(--bg-sidebar)',
+                      borderRadius: 'var(--radius-sm)',
+                      border: '1px solid var(--border-muted)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      userSelect: 'none'
+                    }}
+                  >
+                    <span style={{ fontWeight: '700', fontSize: '0.85rem', color: 'var(--text-main)' }}>
+                      {profileExpanded ? '▼' : '▶'} {searchTerm} Profile
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {profileExpanded ? 'Collapse Details' : 'Expand Details'}
+                    </span>
+                  </div>
+                )}
+
+                {!isEditingProfile && profileExpanded && (
+                  <div style={{ 
+                    padding: '12px 4px 4px 4px', 
+                    display: 'grid', 
+                    gridTemplateColumns: '1fr 1fr', 
+                    gap: '12px', 
+                    fontSize: '0.8rem',
+                    borderTop: '1px solid var(--border-muted)',
+                    color: 'var(--text-muted)'
+                  }}>
+                    <div>
+                      <strong style={{ color: 'var(--primary)' }}>Location:</strong>
+                      <div style={{ marginTop: '2px', color: 'var(--text-main)' }}>{formData.location || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <strong style={{ color: 'var(--primary)' }}>Leadership Head:</strong>
+                      <div style={{ marginTop: '2px', color: 'var(--text-main)' }}>
+                        {isHospital ? (formData.headOfHospital || 'N/A') : (formData.headOfInstitution || 'N/A')}
+                      </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: 'var(--primary)' }}>Leadership Contact:</strong>
+                      <div style={{ marginTop: '2px', color: 'var(--text-main)' }}>
+                        {isHospital ? (formData.contactNumber || 'N/A') : (formData.headContact || 'N/A')}
+                      </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: 'var(--primary)' }}>SPOC Name:</strong>
+                      <div style={{ marginTop: '2px', color: 'var(--text-main)' }}>
+                        {isHospital ? (formData.headOfHr || 'N/A') : (formData.spocName || 'N/A')}
+                      </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: 'var(--primary)' }}>SPOC Contact:</strong>
+                      <div style={{ marginTop: '2px', color: 'var(--text-main)' }}>
+                        {isHospital ? (formData.hrContact || 'N/A') : (formData.spocContact || 'N/A')}
+                      </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: 'var(--primary)' }}>SPOC Email:</strong>
+                      <div style={{ marginTop: '2px', color: 'var(--text-main)' }}>
+                        {isHospital ? (formData.hrEmail || 'N/A') : (formData.spocEmail || 'N/A')}
+                      </div>
+                    </div>
+                    {isHospital ? (
+                      <>
+                        <div>
+                          <strong style={{ color: 'var(--primary)' }}>Total Beds:</strong>
+                          <div style={{ marginTop: '2px', color: 'var(--text-main)' }}>{formData.numberOfBeds || 'N/A'}</div>
+                        </div>
+                        <div>
+                          <strong style={{ color: 'var(--primary)' }}>Total Employees:</strong>
+                          <div style={{ marginTop: '2px', color: 'var(--text-main)' }}>{formData.numberOfEmployees || 'N/A'}</div>
+                        </div>
+                      </>
+                    ) : (
+                      <div>
+                        <strong style={{ color: 'var(--primary)' }}>Final Year Students:</strong>
+                        <div style={{ marginTop: '2px', color: 'var(--text-main)' }}>{formData.finalYearStudentsCount || 'N/A'}</div>
+                      </div>
+                    )}
+                    
+                    {/* Previous Notes */}
+                    <div style={{ gridColumn: 'span 2', marginTop: '6px', paddingTop: '8px', borderTop: '1px solid var(--border-muted)' }}>
+                      <strong style={{ color: 'var(--primary)' }}>Previous observations timeline:</strong>
+                      <div style={{ 
+                        marginTop: '4px', 
+                        padding: '10px', 
+                        backgroundColor: 'var(--bg-card)', 
+                        border: '1px solid var(--border-muted)', 
+                        borderRadius: 'var(--radius-sm)',
+                        maxHeight: '90px',
+                        overflowY: 'auto'
+                      }}>
+                        {(() => {
+                          const org = organizations.find(o => o.name.toLowerCase() === searchTerm.toLowerCase() && o.type === formData.meetingType);
+                          const relatedReports = reports.filter(r => {
+                            if (org?.id && r.organizationId === org.id) return true;
+                            const targetName = formData.meetingType === 'Hospital' ? r.hospitalName : r.institutionName;
+                            return targetName?.toLowerCase() === searchTerm.toLowerCase();
+                          });
+                          const obs = relatedReports
+                            .map(r => r.marketingObservation || r.observations)
+                            .filter(Boolean);
+                          
+                          if (obs.length > 0) {
+                            return (
+                              <ul style={{ paddingLeft: '14px', margin: 0, color: 'var(--text-muted)' }}>
+                                {obs.map((o, i) => (
+                                  <li key={i} style={{ marginBottom: '4px' }}>{o}</li>
+                                ))}
+                              </ul>
+                            );
+                          }
+                          return 'No observations history recorded for this profile yet.';
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(!isAutoFilled || isEditingProfile) && (
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label className="form-label">Number of Final Year Students</label>
+                <label className="form-label">Location</label>
                 <div style={{ marginTop: '6px' }}>
                   <input 
-                    type="number" 
-                    className="form-input" 
-                    placeholder="Total candidates in graduating class..."
-                    value={formData.finalYearStudentsCount || ''} 
-                    onChange={e => handleChange('finalYearStudentsCount', e.target.value ? Number(e.target.value) : undefined)} 
+                    type="text"
+                    className="form-input"
+                    placeholder="Street address, City, Region..."
+                    value={formData.location || ''}
+                    onChange={(e) => handleChange('location', e.target.value)}
+                    required
                   />
                 </div>
               </div>
             )}
           </div>
         </div>
+
+        {(!isAutoFilled || isEditingProfile) && (
+          /* Dynamic Card 2: Strategic CRM Contacts & Profile Details */
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-muted)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '24px',
+            backdropFilter: 'var(--glass-filter)'
+          }}>
+            <h4 style={{ color: 'var(--primary)', marginBottom: '16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+              CRM Stakeholder Directory
+            </h4>
+            
+            <div className="form-grid">
+              {/* Leadership Stakeholder */}
+              <div className="form-group">
+                <label className="form-label">{isHospital ? 'Head of Hospital' : 'Head of Institution'}</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder={isHospital ? 'e.g. Dr. Sarah Connor' : 'e.g. Dean Arthur Pendelton'}
+                    value={isHospital ? (formData.headOfHospital || '') : (formData.headOfInstitution || '')} 
+                    onChange={e => handleChange(isHospital ? 'headOfHospital' : 'headOfInstitution', e.target.value)} 
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Leadership Contact details</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Primary phone or direct extension..."
+                    value={isHospital ? (formData.contactNumber || '') : (formData.headContact || '')} 
+                    onChange={e => handleChange(isHospital ? 'contactNumber' : 'headContact', e.target.value)} 
+                  />
+                </div>
+              </div>
+
+              {/* SPOC Stakeholder */}
+              <div className="form-group">
+                <label className="form-label">{isHospital ? 'Head of HR / SPOC Name' : 'SPOC Name'}</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Single Point of Contact (SPOC) Name..."
+                    value={isHospital ? (formData.headOfHr || '') : (formData.spocName || '')} 
+                    onChange={e => handleChange(isHospital ? 'headOfHr' : 'spocName', e.target.value)} 
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">SPOC Contact Number</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="SPOC direct mobile number..."
+                    value={isHospital ? (formData.hrContact || '') : (formData.spocContact || '')} 
+                    onChange={e => handleChange(isHospital ? 'hrContact' : 'spocContact', e.target.value)} 
+                  />
+                </div>
+              </div>
+
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">SPOC Email Address</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input 
+                    type="email" 
+                    className="form-input" 
+                    placeholder="spoc@organization.com"
+                    value={isHospital ? (formData.hrEmail || '') : (formData.spocEmail || '')} 
+                    onChange={e => handleChange(isHospital ? 'hrEmail' : 'spocEmail', e.target.value)} 
+                  />
+                </div>
+              </div>
+
+              {/* Dynamic Metric Field depending on meeting type */}
+              {isHospital ? (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Number of Beds</label>
+                    <div style={{ marginTop: '6px' }}>
+                      <input 
+                        type="number" 
+                        className="form-input" 
+                        placeholder="e.g. 250"
+                        value={formData.numberOfBeds || ''} 
+                        onChange={e => handleChange('numberOfBeds', e.target.value ? Number(e.target.value) : undefined)} 
+                      />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Total Staff / Employees</label>
+                    <div style={{ marginTop: '6px' }}>
+                      <input 
+                        type="number" 
+                        className="form-input" 
+                        placeholder="e.g. 1500"
+                        value={formData.numberOfEmployees || ''} 
+                        onChange={e => handleChange('numberOfEmployees', e.target.value ? Number(e.target.value) : undefined)} 
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label">Number of Final Year Students</label>
+                  <div style={{ marginTop: '6px' }}>
+                    <input 
+                      type="number" 
+                      className="form-input" 
+                      placeholder="Total candidates in graduating class..."
+                      value={formData.finalYearStudentsCount || ''} 
+                      onChange={e => handleChange('finalYearStudentsCount', e.target.value ? Number(e.target.value) : undefined)} 
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Dynamic Card 3: Additional Activity Information (Follow Ups, Campaigns, Conferences) */}
         {(formData.activityType?.includes('Follow up') || formData.activityType === 'Campaigns Conducted' || formData.activityType === 'Participation in Conferences') && (
@@ -521,13 +813,7 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
               {/* Follow ups */}
               {formData.activityType?.includes('Follow up') && (
                 <>
-                  <div className="form-group">
-                    <label className="form-label">Date of Activity</label>
-                    <div style={{ marginTop: '6px' }}>
-                      <input type="date" className="form-input" value={formData.dateOfActivity || ''} onChange={e => handleChange('dateOfActivity', e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="form-group">
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
                     <label className="form-label">Mode of Meeting</label>
                     <div style={{ marginTop: '6px' }}>
                       <select className="form-select" value={formData.modeOfMeeting || ''} onChange={e => handleChange('modeOfMeeting', e.target.value)}>
@@ -679,7 +965,7 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
         </h3>
         
         <div className="form-grid">
-          <div className="form-group" style={{ gridColumn: 'span 2' }}>
+          <div className="form-group">
             <label className="form-label">Activity Type</label>
             <div style={{ marginTop: '6px' }}>
               <select 
@@ -695,61 +981,122 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
             </div>
           </div>
 
-          {/* Dynamic Segment Buttons for Meeting Type */}
-          <div className="form-group" style={{ gridColumn: 'span 2', marginTop: '8px' }}>
-            <label className="form-label" style={{ display: 'block', marginBottom: '8px' }}>Select Meeting Entity Type</label>
-            <div style={{ display: 'flex', gap: '16px' }}>
-              <div 
-                onClick={() => handleMeetingTypeChange('Institution')}
-                style={{
-                  flex: 1,
-                  padding: '16px',
-                  borderRadius: 'var(--radius-md)',
-                  backgroundColor: formData.meetingType === 'Institution' ? 'rgba(168, 85, 247, 0.08)' : 'var(--bg-sidebar)',
-                  border: formData.meetingType === 'Institution' ? '2px solid var(--primary)' : '2px solid var(--border-muted)',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                  transition: 'all var(--transition-normal)',
-                  boxShadow: formData.meetingType === 'Institution' ? 'var(--shadow-glow)' : 'none',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={formData.meetingType === 'Institution' ? 'var(--primary)' : 'var(--text-muted)'} strokeWidth="2">
-                  <path d="M22 10v6M2 10v6M4 10h16M12 4v16" />
-                  <rect x="4" y="10" width="16" height="10" rx="2" />
-                  <path d="M12 4L4 10h16z" />
-                </svg>
-                <span style={{ fontWeight: '700', fontSize: '0.9rem', color: formData.meetingType === 'Institution' ? 'var(--text-main)' : 'var(--text-muted)' }}>Institution</span>
-              </div>
-              <div 
-                onClick={() => handleMeetingTypeChange('Hospital')}
-                style={{
-                  flex: 1,
-                  padding: '16px',
-                  borderRadius: 'var(--radius-md)',
-                  backgroundColor: formData.meetingType === 'Hospital' ? 'rgba(168, 85, 247, 0.08)' : 'var(--bg-sidebar)',
-                  border: formData.meetingType === 'Hospital' ? '2px solid var(--primary)' : '2px solid var(--border-muted)',
-                  cursor: 'pointer',
-                  textAlign: 'center',
-                  transition: 'all var(--transition-normal)',
-                  boxShadow: formData.meetingType === 'Hospital' ? 'var(--shadow-glow)' : 'none',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={formData.meetingType === 'Hospital' ? 'var(--primary)' : 'var(--text-muted)'} strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <path d="M9 12h6M12 9v6" />
-                </svg>
-                <span style={{ fontWeight: '700', fontSize: '0.9rem', color: formData.meetingType === 'Hospital' ? 'var(--text-main)' : 'var(--text-muted)' }}>Hospital</span>
+          <div className="form-group">
+            <label className="form-label">Date of Meeting / Activity</label>
+            <div style={{ marginTop: '6px' }}>
+              <input 
+                type="date" 
+                className="form-input" 
+                value={formData.dateOfActivity || ''} 
+                onChange={e => handleChange('dateOfActivity', e.target.value)} 
+                required
+              />
+            </div>
+            {(() => {
+              const { diffDays, isValid, status } = getDaysDifference(formData.dateOfActivity);
+              if (status === 'empty') {
+                return (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '6px', display: 'block' }}>
+                    * Required for report submission.
+                  </span>
+                );
+              }
+              if (!isStaff) {
+                return (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--success)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
+                    ✨ Admin Mode: Validation bypassed. {diffDays !== null ? `(Date is ${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago)` : ''}
+                  </span>
+                );
+              }
+              if (status === 'valid') {
+                return (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--success)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
+                    ✓ Valid: Meeting was {diffDays === 0 ? 'today' : `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`} (within 2-day limit).
+                  </span>
+                );
+              }
+              if (status === 'future') {
+                return (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--error-text)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
+                    ⚠️ Invalid: Date cannot be in the future.
+                  </span>
+                );
+              }
+              if (status === 'expired') {
+                return (
+                  <span style={{ fontSize: '0.72rem', color: 'var(--error-text)', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
+                    ⚠️ Expired: Meeting was {diffDays} days ago (2-day limit).
+                  </span>
+                );
+              }
+              return null;
+            })()}
+          </div>
+
+          {/* Dynamic Segment Buttons / Dropdown for Meeting Type */}
+          {formData.activityType === 'Meeting with Organisation' && (
+            <div 
+              className="form-group" 
+              style={{ 
+                gridColumn: 'span 2', 
+                marginTop: '8px',
+                animation: 'fadeInSlide 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                transformOrigin: 'top center'
+              }}
+            >
+              <style dangerouslySetInnerHTML={{__html: `
+                @keyframes fadeInSlide {
+                  from {
+                    opacity: 0;
+                    transform: translateY(-8px);
+                    max-height: 0;
+                    margin-top: 0;
+                  }
+                  to {
+                    opacity: 1;
+                    transform: translateY(0);
+                    max-height: 120px;
+                    margin-top: 8px;
+                  }
+                }
+              `}} />
+              <label className="form-label" style={{ display: 'block', marginBottom: '8px' }}>Select Meeting Entity Type</label>
+              <div style={{ position: 'relative' }}>
+                <select 
+                  className="form-select"
+                  value={formData.meetingType || 'Institution'}
+                  onChange={(e) => handleMeetingTypeChange(e.target.value as 'Institution' | 'Hospital')}
+                  style={{ 
+                    padding: '12px 16px',
+                    width: '100%',
+                    backgroundColor: 'var(--bg-sidebar)',
+                    border: '2px solid var(--border-muted)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-main)',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    appearance: 'none',
+                    backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a855f7' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
+                    backgroundRepeat: 'no-repeat',
+                    backgroundPosition: 'right 16px center',
+                    backgroundSize: '14px',
+                    transition: 'all var(--transition-fast)'
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.borderColor = 'var(--primary)';
+                    e.target.style.boxShadow = 'var(--shadow-glow)';
+                  }}
+                  onBlur={(e) => {
+                    e.target.style.borderColor = 'var(--border-muted)';
+                    e.target.style.boxShadow = 'none';
+                  }}
+                >
+                  <option value="Institution" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}>Institution</option>
+                  <option value="Hospital" style={{ backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}>Hospital</option>
+                </select>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
 

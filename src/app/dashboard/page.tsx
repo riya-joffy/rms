@@ -13,6 +13,8 @@ import { ReportCard } from '../../components/ReportCard';
 import { CreateUserModal } from '../../components/CreateUserModal';
 import { ExpenseTracker } from '../../components/ExpenseTracker';
 import { AdminExpenseTracker } from '../../components/AdminExpenseTracker';
+import { OrganizationProfilesView } from '../../components/OrganizationProfilesView';
+import { SVGCharts } from '../../components/SVGCharts';
 import { isAdminRole, isStaffRole } from '../../lib/roles';
 
 export default function DashboardPage() {
@@ -47,10 +49,10 @@ export default function DashboardPage() {
     console.log('ROLE:', user.role);
     console.log('ACTIVE TAB:', activeTab);
 
-    if (isStaffRole(user.role) && !['dashboard', 'create-report', 'expense-tracker'].includes(activeTab)) {
+    if (isStaffRole(user.role) && !['dashboard', 'create-report', 'organization-profiles', 'expense-tracker'].includes(activeTab)) {
       setActiveTab('dashboard');
     }
-    if (isAdminRole(user.role) && !['dashboard', 'staff', 'staff-expenses'].includes(activeTab)) {
+    if (isAdminRole(user.role) && !['dashboard', 'organization-profiles', 'staff', 'staff-expenses'].includes(activeTab)) {
       setActiveTab('dashboard');
     }
   }, [activeTab, setActiveTab, user]);
@@ -193,6 +195,9 @@ export default function DashboardPage() {
                     </div>
                   </section>
 
+                  {/* Operational Submissions Graph */}
+                  <SVGCharts reports={reports.filter(r => r.staffId === user.id)} />
+
                   {/* My Submissions & Drafts Tracker */}
                   <div className="table-card" style={{ marginTop: '24px' }}>
                     <div className="table-header-bar">
@@ -216,12 +221,11 @@ export default function DashboardPage() {
                         <table className="data-table">
                           <thead>
                             <tr>
-                              <th>Report ID</th>
                               <th>Institution / Hospital</th>
                               <th>Location</th>
                               <th>Activity Type</th>
+                              <th>Meeting Date</th>
                               <th>Submitted Date</th>
-                              <th>Status</th>
                               <th style={{ textAlign: 'right' }}>Actions</th>
                             </tr>
                           </thead>
@@ -230,23 +234,11 @@ export default function DashboardPage() {
                               .filter(r => r.staffId === user.id)
                               .map((rep) => (
                                 <tr key={rep.id}>
-                                  <td style={{ fontFamily: 'var(--font-mono)', fontWeight: '700' }}>{rep.id}</td>
                                   <td style={{ fontWeight: '600' }}>{rep.institutionName || rep.hospitalName || rep.conferenceName || 'N/A'}</td>
                                   <td>{rep.location}</td>
-                                  <td>{rep.activityType} ({rep.meetingType})</td>
+                                  <td>{rep.activityType} {rep.meetingType ? `(${rep.meetingType})` : ''}</td>
+                                  <td style={{ fontWeight: '700', color: 'var(--text-main)' }}>{rep.dateOfActivity || 'N/A'}</td>
                                   <td>{rep.date} @ {rep.time}</td>
-                                  <td>
-                                    <span className={
-                                      rep.status === 'Approved' ? 'badge approved' : 
-                                      rep.status === 'Rejected' ? 'badge rejected' : 
-                                      rep.status === 'Draft' ? 'badge pending' : 'badge pending'
-                                    } style={{ 
-                                      backgroundColor: rep.status === 'Draft' ? 'rgba(245, 158, 11, 0.1)' : undefined,
-                                      color: rep.status === 'Draft' ? 'var(--warning)' : undefined
-                                    }}>
-                                      {rep.status}
-                                    </span>
-                                  </td>
                                   <td style={{ textAlign: 'right' }}>
                                     {rep.status === 'Draft' ? (
                                       <button 
@@ -576,6 +568,15 @@ export default function DashboardPage() {
                 onCancel={() => { setReportToEdit(null); setActiveTab('dashboard'); }}
               />
             </div>
+          )}
+
+          {/* ========================================================
+              TAB G: CRM ORGANIZATION PROFILES DIRECTORY
+              ======================================================== */}
+          {activeTab === 'organization-profiles' && (
+            <OrganizationProfilesView 
+              onInspectReport={handleInspectReport}
+            />
           )}
 
         </main>

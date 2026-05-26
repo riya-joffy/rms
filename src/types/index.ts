@@ -38,6 +38,9 @@ export interface Organization {
   // Conferences
   targetProfessionals?: string;
   numberOfParticipants?: number;
+
+  // CRM
+  previousObservations?: string[];
 }
 
 
@@ -66,6 +69,7 @@ export interface ReportHistory {
 
 export interface MarketReport {
   id: string;
+  organizationId?: string;
   date: string;
   time: string;
   region?: string;

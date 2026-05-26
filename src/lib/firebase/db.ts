@@ -12,6 +12,7 @@ import {
   orderBy, 
   limit, 
   setDoc,
+  deleteDoc,
   onSnapshot,
   type QueryDocumentSnapshot,
   type DocumentData,
@@ -29,6 +30,72 @@ export const isFirebaseActive = (): boolean => {
 // ==========================================
 // 1. Initial Mock / Seed Data
 // ==========================================
+
+const DEFAULT_ORGANIZATIONS: Organization[] = [
+  {
+    id: 'org-stjude',
+    name: 'St. Jude Children Research Hospital',
+    type: 'Hospital',
+    location: 'Memphis, TN',
+    numberOfBeds: 80,
+    numberOfEmployees: 1200,
+    headOfHospital: 'Dr. James Downing',
+    contactNumber: '+1 901-595-3300',
+    headOfHr: 'Sarah Jenkins',
+    hrContact: '+1 901-595-4422',
+    hrEmail: 's.jenkins@stjude.org'
+  },
+  {
+    id: 'org-stanford',
+    name: 'Stanford School of Medicine',
+    type: 'Institution',
+    location: 'Stanford, CA',
+    finalYearStudentsCount: 150,
+    headOfInstitution: 'Dean Lloyd Minor',
+    headContact: '+1 650-723-6951',
+    spocName: 'Grace Hopper',
+    spocContact: '+1 650-723-1122',
+    spocEmail: 'ghopper@stanford.edu'
+  },
+  {
+    id: 'org-citygen',
+    name: 'City General Hospital',
+    type: 'Hospital',
+    location: 'Boston, MA',
+    numberOfBeds: 120,
+    numberOfEmployees: 800,
+    headOfHospital: 'Dr. Sarah Connor',
+    contactNumber: '+1 555-0199',
+    headOfHr: 'John Smith',
+    hrContact: '+1 555-0188',
+    hrEmail: 'jsmith@cityhospital.org'
+  },
+  {
+    id: 'org-statemed',
+    name: 'State Medical University',
+    type: 'Institution',
+    location: 'New York, NY',
+    finalYearStudentsCount: 250,
+    headOfInstitution: 'Dean Arthur Pendelton',
+    headContact: '+1 555-0211',
+    spocName: 'Elena Rostova',
+    spocContact: '+1 555-0212',
+    spocEmail: 'erostova@statemed.edu'
+  },
+  {
+    id: 'org-grace',
+    name: 'Grace Clinic Centre',
+    type: 'Hospital', // Kept as Hospital for backward-compatibility or type matching if needed
+    location: 'Chicago, IL',
+    numberOfBeds: 45,
+    numberOfEmployees: 150,
+    headOfHospital: 'Dr. Gregory House',
+    contactNumber: '+1 555-0300',
+    headOfHr: 'James Wilson',
+    hrContact: '+1 555-0301',
+    hrEmail: 'jwilson@graceclinic.org'
+  }
+];
 
 const DEFAULT_USERS: User[] = [
   {
@@ -51,6 +118,39 @@ const DEFAULT_USERS: User[] = [
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
     status: 'active',
     lastActive: '2026-05-21T15:30:00Z',
+  },
+  {
+    id: 'S-202',
+    name: 'Marcus Chen',
+    email: 'marcus.chen@gmail.com',
+    role: 'staff',
+    department: 'Field Surveys',
+    region: 'Europe',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+    status: 'active',
+    lastActive: '2026-05-25T11:20:00Z',
+  },
+  {
+    id: 'S-203',
+    name: 'Eleanor Vance',
+    email: 'eleanor.vance@gmail.com',
+    role: 'staff',
+    department: 'Clinical Outreach',
+    region: 'Asia Pacific',
+    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
+    status: 'active',
+    lastActive: '2026-05-24T09:45:00Z',
+  },
+  {
+    id: 'S-204',
+    name: 'Geo Joffy',
+    email: 'geojoffy@gmail.com',
+    role: 'staff',
+    department: 'Relationship Management',
+    region: 'Kerala',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
+    status: 'active',
+    lastActive: '2026-05-26T09:00:00Z',
   }
 ];
 
@@ -59,6 +159,7 @@ const DEFAULT_REPORTS: MarketReport[] = [
     id: 'REP-2026-001',
     date: '2026-05-20',
     time: '14:30',
+    dateOfActivity: '2026-05-19',
     staffName: 'Zandra Kanja',
     staffId: 'S-201',
     department: 'Market Analysis',
@@ -89,6 +190,7 @@ const DEFAULT_REPORTS: MarketReport[] = [
     id: 'REP-2026-002',
     date: '2026-05-21',
     time: '09:15',
+    dateOfActivity: '2026-05-20',
     staffName: 'Zandra Kanja',
     staffId: 'S-201',
     department: 'Market Analysis',
@@ -115,6 +217,7 @@ const DEFAULT_REPORTS: MarketReport[] = [
     id: 'REP-2026-003',
     date: '2026-05-21',
     time: '11:00',
+    dateOfActivity: '2026-05-21',
     staffName: 'Zandra Kanja',
     staffId: 'S-201',
     department: 'Market Analysis',
@@ -135,6 +238,326 @@ const DEFAULT_REPORTS: MarketReport[] = [
     attachments: [],
     history: [
       { id: 'h-31', status: 'Draft', date: '2026-05-21T11:00:00Z', comment: 'Draft saved locally.', user: 'Zandra Kanja' }
+    ]
+  },
+  {
+    id: 'REP-2026-004',
+    date: '2026-05-25',
+    time: '10:15',
+    dateOfActivity: '2026-05-24',
+    staffName: 'Zandra Kanja',
+    staffId: 'S-201',
+    department: 'Market Analysis',
+    status: 'Approved',
+    activityType: 'Meeting with Organisation',
+    meetingType: 'Hospital',
+    hospitalName: 'St. Jude Children Research Hospital',
+    location: 'Memphis, TN',
+    numberOfBeds: 80,
+    numberOfEmployees: 1200,
+    headOfHospital: 'Dr. James Downing',
+    contactNumber: '+1 901-595-3300',
+    headOfHr: 'Sarah Jenkins',
+    hrContact: '+1 901-595-4422',
+    hrEmail: 's.jenkins@stjude.org',
+    notes: 'Conducted a premium CRM profiling session with the pediatric department. Highly receptive to our residency partnership initiative. St. Jude profile has been successfully saved in our CRM stakeholder registry.',
+    marketingObservation: 'Conducted a premium CRM profiling session with the pediatric department. Highly receptive to our residency partnership initiative. St. Jude profile has been successfully saved in our CRM stakeholder registry.',
+    costOfVisit: 350,
+    dateTime: '2026-05-25T10:15',
+    attachments: [],
+    history: [
+      { id: 'h-41', status: 'Pending', date: '2026-05-25T10:30:00Z', comment: 'Compiled hospital meeting.', user: 'Zandra Kanja' },
+      { id: 'h-42', status: 'Approved', date: '2026-05-25T12:00:00Z', comment: 'Profile updated and residency program approved.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-005',
+    date: '2026-05-26',
+    time: '11:00',
+    dateOfActivity: '2026-05-25',
+    staffName: 'Zandra Kanja',
+    staffId: 'S-201',
+    department: 'Market Analysis',
+    status: 'Pending',
+    activityType: 'Meeting with Organisation',
+    meetingType: 'Institution',
+    institutionName: 'Stanford School of Medicine',
+    location: 'Stanford, CA',
+    finalYearStudentsCount: 150,
+    headOfInstitution: 'Dean Lloyd Minor',
+    headContact: '+1 650-723-6951',
+    spocName: 'Grace Hopper',
+    spocContact: '+1 650-723-1122',
+    spocEmail: 'ghopper@stanford.edu',
+    notes: 'Met with the dean and student placement coordinators. Negotiated rotation schedules for the upcoming graduating class of 150 candidates. The profile details are completely loaded.',
+    marketingObservation: 'Met with the dean and student placement coordinators. Negotiated rotation schedules for the upcoming graduating class of 150 candidates. The profile details are completely loaded.',
+    costOfVisit: 180,
+    dateTime: '2026-05-26T11:00',
+    attachments: [],
+    history: [
+      { id: 'h-51', status: 'Pending', date: '2026-05-26T11:15:00Z', comment: 'Submitted rotation schedule for medical students.', user: 'Zandra Kanja' }
+    ]
+  },
+  {
+    id: 'REP-2026-006',
+    date: '2026-03-05',
+    time: '10:00',
+    dateOfActivity: '2026-03-04',
+    staffName: 'Zandra Kanja',
+    staffId: 'S-201',
+    department: 'Market Analysis',
+    status: 'Approved',
+    activityType: 'Hospital Visit',
+    meetingType: 'Physical',
+    institutionName: 'City General Hospital',
+    location: 'Boston, MA',
+    notes: 'Quarterly review with pediatric resident leads. High student placement engagement for clinical rotations.',
+    costOfVisit: 320,
+    dateTime: '2026-03-05T10:00',
+    attachments: [],
+    history: [
+      { id: 'h-61', status: 'Pending', date: '2026-03-05T10:30:00Z', comment: 'Submitted quarterly report.', user: 'Zandra Kanja' },
+      { id: 'h-62', status: 'Approved', date: '2026-03-05T12:00:00Z', comment: 'Approved by board.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-007',
+    date: '2026-03-12',
+    time: '13:15',
+    dateOfActivity: '2026-03-11',
+    staffName: 'Marcus Chen',
+    staffId: 'S-202',
+    department: 'Field Surveys',
+    status: 'Approved',
+    activityType: 'SPOC Meeting',
+    meetingType: 'Telephonic',
+    institutionName: 'Stanford School of Medicine',
+    location: 'Stanford, CA',
+    notes: 'Detailed discussion on candidate orientation schedules. Cleared accommodation expenses.',
+    costOfVisit: 650,
+    dateTime: '2026-03-12T13:15',
+    attachments: [],
+    history: [
+      { id: 'h-71', status: 'Pending', date: '2026-03-12T13:30:00Z', comment: 'Submitted orientation expenses.', user: 'Marcus Chen' },
+      { id: 'h-72', status: 'Approved', date: '2026-03-12T15:00:00Z', comment: 'Approved expenses.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-008',
+    date: '2026-03-22',
+    time: '09:00',
+    dateOfActivity: '2026-03-20',
+    staffName: 'Eleanor Vance',
+    staffId: 'S-203',
+    department: 'Clinical Outreach',
+    status: 'Approved',
+    activityType: 'Participation in Conferences',
+    meetingType: 'Physical',
+    institutionName: 'State Medical University',
+    location: 'New York, NY',
+    notes: 'Represented RMS at the National Medical Seminar. Spoke to 400 attendees. Booth rentals, travel and accommodation claimed.',
+    costOfVisit: 1100,
+    dateTime: '2026-03-22T09:00',
+    attachments: [],
+    history: [
+      { id: 'h-81', status: 'Pending', date: '2026-03-22T09:30:00Z', comment: 'Submitted seminar expenses.', user: 'Eleanor Vance' },
+      { id: 'h-82', status: 'Approved', date: '2026-03-22T17:00:00Z', comment: 'Approved seminar expenses.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-009',
+    date: '2026-04-02',
+    time: '15:30',
+    dateOfActivity: '2026-04-01',
+    staffName: 'Zandra Kanja',
+    staffId: 'S-201',
+    department: 'Market Analysis',
+    status: 'Approved',
+    activityType: 'Follow ups',
+    meetingType: 'Virtual',
+    institutionName: 'Grace Clinic Centre',
+    location: 'Chicago, IL',
+    notes: 'Followed up on hospital residency contracts. Virtual sync expenses recorded.',
+    costOfVisit: 150,
+    dateTime: '2026-04-02T15:30',
+    attachments: [],
+    history: [
+      { id: 'h-91', status: 'Pending', date: '2026-04-02T16:00:00Z', comment: 'Submitted.', user: 'Zandra Kanja' },
+      { id: 'h-92', status: 'Approved', date: '2026-04-02T17:00:00Z', comment: 'Approved.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-010',
+    date: '2026-04-15',
+    time: '11:00',
+    dateOfActivity: '2026-04-14',
+    staffName: 'Marcus Chen',
+    staffId: 'S-202',
+    department: 'Field Surveys',
+    status: 'Approved',
+    activityType: 'Campaigns Conducted',
+    meetingType: 'Physical',
+    institutionName: 'City General Hospital',
+    location: 'Boston, MA',
+    notes: 'Conducted a candidate registration drive for final year graduates. Custom branding materials and lunch packages claimed.',
+    costOfVisit: 420,
+    dateTime: '2026-04-15T11:00',
+    attachments: [],
+    history: [
+      { id: 'h-101', status: 'Pending', date: '2026-04-15T11:30:00Z', comment: 'Submitted.', user: 'Marcus Chen' },
+      { id: 'h-102', status: 'Approved', date: '2026-04-15T13:00:00Z', comment: 'Approved.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-011',
+    date: '2026-04-25',
+    time: '14:00',
+    dateOfActivity: '2026-04-23',
+    staffName: 'Eleanor Vance',
+    staffId: 'S-203',
+    department: 'Clinical Outreach',
+    status: 'Approved',
+    activityType: 'Meeting with Organisation',
+    meetingType: 'Physical',
+    institutionName: 'St. Jude Children Research Hospital',
+    location: 'Memphis, TN',
+    notes: 'Clinical collaboration discussion with residency program manager. Flight expenses and hospital lunch claimed.',
+    costOfVisit: 820,
+    dateTime: '2026-04-25T14:00',
+    attachments: [],
+    history: [
+      { id: 'h-111', status: 'Pending', date: '2026-04-25T14:30:00Z', comment: 'Submitted.', user: 'Eleanor Vance' },
+      { id: 'h-112', status: 'Approved', date: '2026-04-25T16:00:00Z', comment: 'Approved.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-012',
+    date: '2026-05-01',
+    time: '09:00',
+    dateOfActivity: '2026-04-30',
+    staffName: 'Zandra Kanja',
+    staffId: 'S-201',
+    department: 'Market Analysis',
+    status: 'Approved',
+    activityType: 'Institution Visit',
+    meetingType: 'Physical',
+    institutionName: 'Stanford School of Medicine',
+    location: 'Stanford, CA',
+    notes: 'Physical seminar on placements. Hotel accommodation and catering expenses claimed.',
+    costOfVisit: 230,
+    dateTime: '2026-05-01T09:00',
+    attachments: [],
+    history: [
+      { id: 'h-121', status: 'Pending', date: '2026-05-01T09:30:00Z', comment: 'Submitted.', user: 'Zandra Kanja' },
+      { id: 'h-122', status: 'Approved', date: '2026-05-01T11:00:00Z', comment: 'Approved.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-013',
+    date: '2026-05-10',
+    time: '10:00',
+    dateOfActivity: '2026-05-08',
+    staffName: 'Marcus Chen',
+    staffId: 'S-202',
+    department: 'Field Surveys',
+    status: 'Approved',
+    activityType: 'Hospital Visit',
+    meetingType: 'Physical',
+    institutionName: 'City General Hospital',
+    location: 'Boston, MA',
+    notes: 'Reviewed student rotations. Train ticket and logistics claimed.',
+    costOfVisit: 510,
+    dateTime: '2026-05-10T10:00',
+    attachments: [],
+    history: [
+      { id: 'h-131', status: 'Pending', date: '2026-05-10T10:30:00Z', comment: 'Submitted.', user: 'Marcus Chen' },
+      { id: 'h-132', status: 'Approved', date: '2026-05-10T12:00:00Z', comment: 'Approved.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-014',
+    date: '2026-05-14',
+    time: '16:00',
+    dateOfActivity: '2026-05-13',
+    staffName: 'Eleanor Vance',
+    staffId: 'S-203',
+    department: 'Clinical Outreach',
+    status: 'Approved',
+    activityType: 'Follow ups',
+    meetingType: 'Virtual',
+    institutionName: 'Grace Clinic Centre',
+    location: 'Chicago, IL',
+    notes: 'Virtual coordination call on hospital orientation logistics.',
+    costOfVisit: 95,
+    dateTime: '2026-05-14T16:00',
+    attachments: [],
+    history: [
+      { id: 'h-141', status: 'Pending', date: '2026-05-14T16:30:00Z', comment: 'Submitted.', user: 'Eleanor Vance' },
+      { id: 'h-142', status: 'Approved', date: '2026-05-14T17:00:00Z', comment: 'Approved.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-015',
+    date: '2026-05-18',
+    time: '08:30',
+    dateOfActivity: '2026-05-17',
+    staffName: 'Marcus Chen',
+    staffId: 'S-202',
+    department: 'Field Surveys',
+    status: 'Approved',
+    activityType: 'Participation in Conferences',
+    meetingType: 'Physical',
+    institutionName: 'Stanford School of Medicine',
+    location: 'Stanford, CA',
+    notes: 'Attended the Stanford Academic Medical Conference. Shared RMS placement program brochures. Flight tickets and registration claimed.',
+    costOfVisit: 680,
+    dateTime: '2026-05-18T08:30',
+    attachments: [],
+    history: [
+      { id: 'h-151', status: 'Pending', date: '2026-05-18T09:00:00Z', comment: 'Submitted.', user: 'Marcus Chen' },
+      { id: 'h-152', status: 'Approved', date: '2026-05-18T11:00:00Z', comment: 'Approved.', user: 'Riya Joffy' }
+    ]
+  },
+  {
+    id: 'REP-2026-016',
+    date: '2026-05-22',
+    time: '14:30',
+    dateOfActivity: '2026-05-21',
+    staffName: 'Eleanor Vance',
+    staffId: 'S-203',
+    department: 'Clinical Outreach',
+    status: 'Pending',
+    activityType: 'SPOC Meeting',
+    meetingType: 'Telephonic',
+    institutionName: 'State Medical University',
+    location: 'New York, NY',
+    notes: 'Telephone meeting with dean SPOC on clinical seat reservations. Pending final approval.',
+    costOfVisit: 310,
+    dateTime: '2026-05-22T14:30',
+    attachments: [],
+    history: [
+      { id: 'h-161', status: 'Pending', date: '2026-05-22T15:00:00Z', comment: 'Submitted.', user: 'Eleanor Vance' }
+    ]
+  },
+  {
+    id: 'REP-2026-017',
+    date: '2026-05-24',
+    time: '10:00',
+    dateOfActivity: '2026-05-23',
+    staffName: 'Zandra Kanja',
+    staffId: 'S-201',
+    department: 'Market Analysis',
+    status: 'Pending',
+    activityType: 'Campaigns Conducted',
+    meetingType: 'Physical',
+    institutionName: 'City General Hospital',
+    location: 'Boston, MA',
+    notes: 'Conducted a mini orientation seminar. Claims for promotional supplies pending audit.',
+    costOfVisit: 400,
+    dateTime: '2026-05-24T10:00',
+    attachments: [],
+    history: [
+      { id: 'h-171', status: 'Pending', date: '2026-05-24T10:30:00Z', comment: 'Submitted orientation campaign report.', user: 'Zandra Kanja' }
     ]
   }
 ];
@@ -242,7 +665,12 @@ export const dbService = {
   // --- ORGANIZATIONS ---
   getOrganizations: (): Organization[] => {
     if (!isFirebaseActive()) {
-      return getStorageItem(KEYS.ORGANIZATIONS, []);
+      const stored = getStorageItem<Organization[]>(KEYS.ORGANIZATIONS, DEFAULT_ORGANIZATIONS);
+      if (stored.length === 0 || !stored.some(o => o.id === 'org-stjude')) {
+        setStorageItem(KEYS.ORGANIZATIONS, DEFAULT_ORGANIZATIONS);
+        return DEFAULT_ORGANIZATIONS;
+      }
+      return stored;
     }
     return liveOrganizationsCache;
   },
@@ -273,6 +701,33 @@ export const dbService = {
       ...orgData,
       id: docRef.id
     };
+  },
+
+  updateOrganization: async (orgId: string, orgData: Partial<Organization>): Promise<void> => {
+    if (!isFirebaseActive()) {
+      const orgs = dbService.getOrganizations();
+      const index = orgs.findIndex(o => o.id === orgId);
+      if (index !== -1) {
+        orgs[index] = { ...orgs[index], ...orgData };
+        setStorageItem(KEYS.ORGANIZATIONS, orgs);
+      }
+      return;
+    }
+
+    const orgDocRef = doc(db, 'organizations', orgId);
+    await updateDoc(orgDocRef, orgData);
+  },
+
+  deleteOrganization: async (orgId: string): Promise<void> => {
+    if (!isFirebaseActive()) {
+      const orgs = dbService.getOrganizations();
+      const filtered = orgs.filter(o => o.id !== orgId);
+      setStorageItem(KEYS.ORGANIZATIONS, filtered);
+      return;
+    }
+
+    const orgDocRef = doc(db, 'organizations', orgId);
+    await deleteDoc(orgDocRef);
   },
 
   // --- USERS ---
@@ -389,7 +844,13 @@ export const dbService = {
   // --- REPORTS ---
   getReports: (): MarketReport[] => {
     if (!isFirebaseActive()) {
-      return getStorageItem(KEYS.REPORTS, DEFAULT_REPORTS);
+      const stored = getStorageItem<MarketReport[]>(KEYS.REPORTS, []);
+      // Auto-reseed with comprehensive fake dataset if reports are fewer than 12
+      if (stored.length < 12) {
+        setStorageItem(KEYS.REPORTS, DEFAULT_REPORTS);
+        return DEFAULT_REPORTS;
+      }
+      return stored;
     }
     return liveReportsCache;
   },

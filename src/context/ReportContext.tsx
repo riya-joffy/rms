@@ -21,6 +21,8 @@ interface ReportContextType {
   reviewReport: (reportId: string, status: 'Approved' | 'Rejected', feedback: string) => void;
   refreshAllData: () => void;
   addOrganization: (orgData: Omit<Organization, 'id'>) => Promise<Organization | void>;
+  updateOrganization: (orgId: string, orgData: Partial<Organization>) => Promise<void>;
+  deleteOrganization: (orgId: string) => Promise<void>;
 }
 
 const ReportContext = createContext<ReportContextType | undefined>(undefined);
@@ -145,6 +147,28 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const updateOrganization = async (orgId: string, orgData: Partial<Organization>) => {
+    try {
+      await dbService.updateOrganization(orgId, orgData);
+      if (!isFirebaseActive()) {
+        loadLocalData();
+      }
+    } catch (e) {
+      console.error('Error updating organization:', e);
+    }
+  };
+
+  const deleteOrganization = async (orgId: string) => {
+    try {
+      await dbService.deleteOrganization(orgId);
+      if (!isFirebaseActive()) {
+        loadLocalData();
+      }
+    } catch (e) {
+      console.error('Error deleting organization:', e);
+    }
+  };
+
   return (
     <ReportContext.Provider
       value={{
@@ -157,6 +181,8 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         reviewReport,
         refreshAllData,
         addOrganization,
+        updateOrganization,
+        deleteOrganization,
       }}
     >
       {children}

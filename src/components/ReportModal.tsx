@@ -80,11 +80,19 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
             <div className="report-detail-item">
               <span className="report-detail-label">Activity & Meeting Type</span>
               <div className="report-detail-val" style={{ fontWeight: '600', color: 'var(--primary)' }}>
-                {report.activityType} ({report.meetingType})
+                {report.activityType} {report.meetingType ? `(${report.meetingType})` : ''}
               </div>
             </div>
             <div className="report-detail-item">
-              <span className="report-detail-label">Scheduled Date & Time</span>
+              <span className="report-detail-label">Meeting / Activity Date</span>
+              <div className="report-detail-val" style={{ fontWeight: '700', color: 'var(--text-main)' }}>
+                {report.dateOfActivity || 'N/A'}
+              </div>
+            </div>
+
+            {/* Row 2.5: Compilation metadata */}
+            <div className="report-detail-item" style={{ gridColumn: 'span 2' }}>
+              <span className="report-detail-label">Report Compiled Date</span>
               <div className="report-detail-val">
                 {report.dateTime ? new Date(report.dateTime).toLocaleString() : `${report.date} @ ${report.time}`}
               </div>

@@ -19,11 +19,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
   const staffNavItems = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'create-report', label: 'Create Report' },
+    { id: 'organization-profiles', label: 'Organization Profiles' },
     { id: 'expense-tracker', label: 'Expense Tracker' },
   ];
 
   const adminNavItems = [
     { id: 'dashboard', label: 'Dashboard' },
+    { id: 'organization-profiles', label: 'Organization Profiles' },
     { id: 'staff', label: 'Staff Directory' },
     { id: 'staff-expenses', label: 'Staff Expenses' },
   ];
@@ -84,6 +86,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <line x1="12" y1="5" x2="12" y2="19" />
                     <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                )}
+                {item.id === 'organization-profiles' && (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="2" y="10" width="10" height="12" rx="2" ry="2" />
+                    <path d="M12 22V4a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v18" />
+                    <path d="M6 14h2" />
+                    <path d="M6 18h2" />
+                    <path d="M16 6h2" />
+                    <path d="M16 10h2" />
+                    <path d="M16 14h2" />
+                    <path d="M16 18h2" />
                   </svg>
                 )}
                 {item.id === 'staff' && (

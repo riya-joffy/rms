@@ -27,7 +27,7 @@ const formatCurrency = (amount: number) =>
 export const exportToXML = (
   reports: MarketReport[],
   staffNameById: Record<string, string>,
-  filters: { staff: string; month: string },
+  filters: { staff: string; month: string; fromDate?: string; toDate?: string },
   totals: {
     totalSpent: number;
     averageCost: number;
@@ -44,8 +44,10 @@ export const exportToXML = (
   xml += `    <ActiveFilters>\n`;
   xml += `      <StaffFilter>${escapeXml(filters.staff)}</StaffFilter>\n`;
   xml += `      <MonthFilter>${escapeXml(filters.month)}</MonthFilter>\n`;
+  if (filters.fromDate) xml += `      <FromDate>${escapeXml(filters.fromDate)}</FromDate>\n`;
+  if (filters.toDate) xml += `      <ToDate>${escapeXml(filters.toDate)}</ToDate>\n`;
   xml += `    </ActiveFilters>\n`;
-  xml += `  </Metadata>\n`;
+  xml += `  </Metadata>\n`;;
 
   // Summary Metrics Section
   xml += `  <SummaryMetrics>\n`;
@@ -150,7 +152,7 @@ export const exportToJPG = async (
 export const exportToPDF = async (
   reports: MarketReport[],
   staffNameById: Record<string, string>,
-  filters: { staff: string; month: string },
+  filters: { staff: string; month: string; fromDate?: string; toDate?: string },
   totals: {
     totalSpent: number;
     averageCost: number;
@@ -203,7 +205,12 @@ export const exportToPDF = async (
   doc.setFontSize(8.5);
   doc.text(`DATE GENERATED: ${new Date().toLocaleString()}`, pageWidth - margin, margin + 6, { align: 'right' });
   doc.text(`STAFF SCOPE: ${filters.staff === 'All' ? 'All Staff Members' : staffNameById[filters.staff] || filters.staff}`, pageWidth - margin, margin + 10, { align: 'right' });
-  doc.text(`MONTH SCOPE: ${filters.month === 'All' ? 'All Operational Months' : filters.month}`, pageWidth - margin, margin + 14, { align: 'right' });
+  
+  // Render Date Range instead of Month Filter if From/To are active
+  const dateRangeStr = (filters.fromDate || filters.toDate)
+    ? `${filters.fromDate || 'Start'} to ${filters.toDate || 'Present'}`
+    : filters.month === 'All' ? 'All Operational Months' : filters.month;
+  doc.text(`DATE RANGE: ${dateRangeStr}`, pageWidth - margin, margin + 14, { align: 'right' });
 
   // Divider Line
   doc.setDrawColor(31, 41, 55); // border-muted HSL(217, 32%, 17%)

@@ -1,33 +1,12 @@
 'use client';
+import React, { useState, useMemo } from 'react';
+import { MarketReport } from '../types';
 
-import React, { useState } from 'react';
+interface SVGChartsProps {
+  reports: MarketReport[];
+}
 
-// Mock Data for Charts
-const MONTHLY_SUBMISSIONS = [
-  { month: 'Dec', count: 18, pending: 0, approved: 16, rejected: 2 },
-  { month: 'Jan', count: 24, pending: 0, approved: 20, rejected: 4 },
-  { month: 'Feb', count: 32, pending: 0, approved: 28, rejected: 4 },
-  { month: 'Mar', count: 28, pending: 0, approved: 25, rejected: 3 },
-  { month: 'Apr', count: 42, pending: 2, approved: 36, rejected: 4 },
-  { month: 'May', count: 58, pending: 5, approved: 48, rejected: 5 },
-];
-
-const CATEGORY_DISTRIBUTION = [
-  { name: 'Competitor Intel', count: 18, color: 'var(--primary)' },
-  { name: 'Consumer Trends', count: 14, color: 'var(--info)' },
-  { name: 'Pricing Analysis', count: 11, color: 'var(--success)' },
-  { name: 'Inventory & Supply', count: 9, color: 'var(--warning)' },
-  { name: 'Promo Tracking', count: 6, color: 'var(--error)' },
-];
-
-const REGIONAL_DISTRIBUTION = [
-  { name: 'North America', count: 25, percentage: 43, color: '#a855f7' }, // purple
-  { name: 'Europe', count: 16, percentage: 28, color: '#0ea5e9' }, // info
-  { name: 'Asia Pacific', count: 10, percentage: 17, color: '#10b981' }, // success
-  { name: 'Latin America', count: 7, percentage: 12, color: '#f59e0b' }, // warning
-];
-
-export const SVGCharts: React.FC = () => {
+export const SVGCharts: React.FC<SVGChartsProps> = ({ reports }) => {
   const [hoveredLineIndex, setHoveredLineIndex] = useState<number | null>(null);
   const [hoveredBarIndex, setHoveredBarIndex] = useState<number | null>(null);
 
@@ -36,32 +15,120 @@ export const SVGCharts: React.FC = () => {
   const lineHeight = 200;
   const padding = 30;
 
+  // 1. Dynamic Monthly Submissions Calculation (Last 6 Months)
+  const monthlySubmissions = useMemo(() => {
+    const result: {
+      month: string;
+      yearMonth: string;
+      count: number;
+      pending: number;
+      approved: number;
+      rejected: number;
+    }[] = [];
+    const date = new Date();
+    // Generate last 6 months starting from 5 months ago
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
+      const label = d.toLocaleString('default', { month: 'short' });
+      const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      result.push({
+        month: label,
+        yearMonth,
+        count: 0,
+        pending: 0,
+        approved: 0,
+        rejected: 0,
+      });
+    }
+
+    reports.forEach((report) => {
+      if (!report.date) return;
+      const [year, month] = report.date.split('-');
+      if (!year || !month) return;
+      const reportYM = `${year}-${month}`;
+
+      const matchedMonth = result.find((m) => m.yearMonth === reportYM);
+      if (matchedMonth) {
+        matchedMonth.count += 1;
+        if (report.status === 'Approved') matchedMonth.approved += 1;
+        else if (report.status === 'Rejected') matchedMonth.rejected += 1;
+        else matchedMonth.pending += 1;
+      }
+    });
+
+    return result;
+  }, [reports]);
+
   // Max value calculation for scaling
-  const maxCount = Math.max(...MONTHLY_SUBMISSIONS.map(d => d.count)) + 10;
-  
+  const maxCount = useMemo(() => {
+    const counts = monthlySubmissions.map((d) => d.count);
+    const maxVal = Math.max(...counts);
+    return maxVal > 0 ? maxVal + 5 : 10;
+  }, [monthlySubmissions]);
+
   // Calculate Line coordinates
-  const getLineCoordinates = () => {
-    return MONTHLY_SUBMISSIONS.map((d, index) => {
-      const x = padding + (index * (lineWidth - 2 * padding)) / (MONTHLY_SUBMISSIONS.length - 1);
+  const coords = useMemo(() => {
+    return monthlySubmissions.map((d, index) => {
+      const x = padding + (index * (lineWidth - 2 * padding)) / (monthlySubmissions.length - 1);
       const y = lineHeight - padding - (d.count / maxCount) * (lineHeight - 2 * padding);
       return { x, y, data: d };
     });
-  };
+  }, [monthlySubmissions, maxCount]);
 
-  const coords = getLineCoordinates();
-  const pathString = coords.reduce((acc, c, i) => {
-    return i === 0 ? `M ${c.x} ${c.y}` : `${acc} L ${c.x} ${c.y}`;
-  }, '');
+  const pathString = useMemo(() => {
+    return coords.reduce((acc, c, i) => {
+      return i === 0 ? `M ${c.x} ${c.y}` : `${acc} L ${c.x} ${c.y}`;
+    }, '');
+  }, [coords]);
 
   // Grid lines
-  const gridLinesY = [4, 3, 2, 1, 0].map(multiplier => {
-    const val = (maxCount / 4) * multiplier;
-    const y = padding + ((4 - multiplier) * (lineHeight - 2 * padding)) / 4;
-    return { val: Math.round(val), y };
-  });
+  const gridLinesY = useMemo(() => {
+    return [4, 3, 2, 1, 0].map((multiplier) => {
+      const val = (maxCount / 4) * multiplier;
+      const y = padding + ((4 - multiplier) * (lineHeight - 2 * padding)) / 4;
+      return { val: Math.round(val), y };
+    });
+  }, [maxCount]);
+
+  // 2. Dynamic Category Distribution Calculation
+  const categoryDistribution = useMemo(() => {
+    const counts: Record<string, number> = {};
+    reports.forEach((report) => {
+      const cat = report.activityType || 'Other';
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+
+    const colors = ['var(--primary)', 'var(--info)', 'var(--success)', 'var(--warning)', 'var(--error)', '#ec4899', '#6366f1'];
+
+    return Object.entries(counts)
+      .map(([name, count], index) => ({
+        name,
+        count,
+        color: colors[index % colors.length],
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5); // Limit to top 5 categories
+  }, [reports]);
+
+  const totalCategoryCount = useMemo(() => {
+    return categoryDistribution.reduce((sum, item) => sum + item.count, 0) || 1;
+  }, [categoryDistribution]);
+
+  // Growth rate calculator helper
+  const growthRateText = useMemo(() => {
+    if (monthlySubmissions.length < 2) return 'Stable';
+    const lastMonth = monthlySubmissions[5].count;
+    const prevMonth = monthlySubmissions[4].count;
+    if (prevMonth === 0) {
+      return lastMonth > 0 ? `+${lastMonth} New Reports` : 'No Recent Activity';
+    }
+    const diff = lastMonth - prevMonth;
+    const pct = Math.round((diff / prevMonth) * 100);
+    return pct >= 0 ? `+${pct}% Growth` : `${pct}% Decreased`;
+  }, [monthlySubmissions]);
 
   return (
-    <div className="analytics-section" style={{ marginBottom: '24px' }}>
+    <div className="analytics-section" style={{ marginBottom: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
       
       {/* 1. LINE CHART: Submissions Volume Trend */}
       <div className="chart-card">
@@ -80,7 +147,7 @@ export const SVGCharts: React.FC = () => {
               fontWeight: '700'
             }}
           >
-            +38% Active Growth
+            {growthRateText}
           </span>
         </div>
 
@@ -206,45 +273,51 @@ export const SVGCharts: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, justifyContent: 'center' }}>
-          {CATEGORY_DISTRIBUTION.map((cat, i) => {
-            const percentage = (cat.count / 58) * 100; // max submissions total base
-            return (
-              <div 
-                key={i} 
-                style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
-                onMouseEnter={() => setHoveredBarIndex(i)}
-                onMouseLeave={() => setHoveredBarIndex(null)}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                  <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{cat.name}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', color: cat.color, fontWeight: '700' }}>
-                    {cat.count} submissions
-                  </span>
-                </div>
-
+          {categoryDistribution.length > 0 ? (
+            categoryDistribution.map((cat, i) => {
+              const percentage = (cat.count / totalCategoryCount) * 100;
+              return (
                 <div 
-                  style={{ 
-                    height: '8px', 
-                    backgroundColor: 'var(--bg-sidebar)', 
-                    borderRadius: 'var(--radius-full)', 
-                    overflow: 'hidden',
-                    border: '1px solid var(--border-muted)'
-                  }}
+                  key={i} 
+                  style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}
+                  onMouseEnter={() => setHoveredBarIndex(i)}
+                  onMouseLeave={() => setHoveredBarIndex(null)}
                 >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                    <span style={{ fontWeight: '600', color: 'var(--text-main)' }}>{cat.name}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: cat.color, fontWeight: '700' }}>
+                      {cat.count} submissions
+                    </span>
+                  </div>
+
                   <div 
                     style={{ 
-                      height: '100%', 
-                      width: `${percentage}%`, 
-                      backgroundColor: cat.color,
-                      borderRadius: 'var(--radius-full)',
-                      boxShadow: hoveredBarIndex === i ? `0 0 10px ${cat.color}` : 'none',
-                      transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease'
+                      height: '8px', 
+                      backgroundColor: 'var(--bg-sidebar)', 
+                      borderRadius: 'var(--radius-full)', 
+                      overflow: 'hidden',
+                      border: '1px solid var(--border-muted)'
                     }}
-                  />
+                  >
+                    <div 
+                      style={{ 
+                        height: '100%', 
+                        width: `${percentage}%`, 
+                        backgroundColor: cat.color,
+                        borderRadius: 'var(--radius-full)',
+                        boxShadow: hoveredBarIndex === i ? `0 0 10px ${cat.color}` : 'none',
+                        transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease'
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          ) : (
+            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+              No categories to display. Create a report to see graph data.
+            </div>
+          )}
         </div>
       </div>
       
