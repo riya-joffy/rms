@@ -11,9 +11,11 @@
   --bg-sidebar: HSL(224, 71%, 2%);
   --bg-card: HSLA(224, 40%, 8%, 0.65);
   --bg-card-hover: HSLA(224, 40%, 12%, 0.8);
+  --bg-input: HSL(224, 12%, 22%);
   
   --border-glow: HSLA(263, 90%, 65%, 0.15);
   --border-muted: HSLA(217, 32%, 17%, 0.7);
+  --border-input: HSLA(217, 32%, 30%, 0.45);
   --border-focus: HSL(263, 90%, 65%);
   
   /* Accent Colors */
@@ -581,6 +583,18 @@ button, input, select, textarea {
   }
 }
 
+.analytics-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .analytics-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .expense-chart-wrap {
   width: 100%;
   min-height: 260px;
@@ -1091,14 +1105,18 @@ button, input, select, textarea {
 }
 
 .form-input, .form-select, .form-textarea {
-  background-color: var(--bg-sidebar);
-  border: 1px solid var(--border-muted);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-input);
   border-radius: var(--radius-md);
   padding: 12px 16px;
   font-size: 0.9rem;
   color: var(--text-main);
   width: 100%;
   transition: all var(--transition-fast);
+}
+
+.form-input::placeholder, .form-textarea::placeholder {
+  color: HSLA(215, 18%, 68%, 0.55);
 }
 
 .form-input:focus, .form-select:focus, .form-textarea:focus {

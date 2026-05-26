@@ -13,12 +13,8 @@ interface CreateReportFormProps {
 
 const ACTIVITY_TYPES = [
   'Meeting with Organisation',
-  'Meetings with Institutes',
-  'Follow up with Institutes',
   'Campaigns Conducted',
-  'Participation in Conferences',
-  'Meetings with Hospitals',
-  'Follow up with Hospitals'
+  'Participation in Conferences'
 ];
 
 export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, onCancel, reportToEdit }) => {
@@ -78,8 +74,23 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
   useEffect(() => {
     if (reportToEdit) {
       let derivedMeetingType = (reportToEdit.meetingType as 'Institution' | 'Hospital') || 'Institution';
-      if (!reportToEdit.meetingType) {
-        if (reportToEdit.activityType?.includes('Hospital') || reportToEdit.hospitalName) {
+      let derivedActivityType = reportToEdit.activityType || ACTIVITY_TYPES[0];
+
+      // Map legacy activities to unified 'Meeting with Organisation'
+      if (
+        derivedActivityType === 'Meetings with Institutes' ||
+        derivedActivityType === 'Follow up with Institutes'
+      ) {
+        derivedActivityType = 'Meeting with Organisation';
+        derivedMeetingType = 'Institution';
+      } else if (
+        derivedActivityType === 'Meetings with Hospitals' ||
+        derivedActivityType === 'Follow up with Hospitals'
+      ) {
+        derivedActivityType = 'Meeting with Organisation';
+        derivedMeetingType = 'Hospital';
+      } else if (!reportToEdit.meetingType) {
+        if (derivedActivityType?.includes('Hospital') || reportToEdit.hospitalName) {
           derivedMeetingType = 'Hospital';
         } else {
           derivedMeetingType = 'Institution';
@@ -88,12 +99,13 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
 
       setFormData({
         ...reportToEdit,
+        activityType: derivedActivityType,
         meetingType: derivedMeetingType
       });
 
       if (derivedMeetingType === 'Hospital') {
         setSearchTerm(reportToEdit.hospitalName || '');
-      } else if (reportToEdit.activityType?.includes('Conference')) {
+      } else if (derivedActivityType?.includes('Conference')) {
         setSearchTerm(reportToEdit.conferenceName || '');
       } else {
         setSearchTerm(reportToEdit.institutionName || '');
@@ -131,12 +143,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
     let defaultMeetingType: 'Institution' | 'Hospital' = 'Institution';
     if (newType === 'Meeting with Organisation') {
       defaultMeetingType = (formData.meetingType as 'Institution' | 'Hospital') || 'Institution';
-    } else if (newType.includes('Hospital')) {
-      defaultMeetingType = 'Hospital';
-    } else if (newType.includes('Institute') || newType.includes('Campaign')) {
-      defaultMeetingType = 'Institution';
     } else {
-      defaultMeetingType = (formData.meetingType as 'Institution' | 'Hospital') || 'Institution';
+      defaultMeetingType = 'Institution';
     }
 
     setFormData({ 
@@ -311,8 +319,24 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
   };
 
   const submitFinal = async (status: 'Draft' | 'Pending') => {
-    if (!searchTerm.trim()) {
-      alert('Organization name is required.');
+    const isMeeting = formData.activityType === 'Meeting with Organisation';
+    const isCampaign = formData.activityType === 'Campaigns Conducted';
+    const isConference = formData.activityType === 'Participation in Conferences';
+
+    let entityName = '';
+    if (isMeeting) {
+      entityName = searchTerm;
+    } else if (isCampaign) {
+      entityName = formData.institutionName || '';
+    } else if (isConference) {
+      entityName = formData.conferenceName || '';
+    }
+
+    if (!entityName.trim()) {
+      let label = 'Organization name';
+      if (isCampaign) label = 'Institution name';
+      if (isConference) label = 'Conference name';
+      alert(`${label} is required.`);
       return;
     }
     
@@ -334,14 +358,19 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
       }
     }
     
-    const orgId = await checkAndSaveOrganization();
+    // Only Meetings use the CRM organization search/profile database
+    let orgId: string | undefined = undefined;
+    if (isMeeting) {
+      orgId = await checkAndSaveOrganization();
+    }
 
     const isHospital = formData.meetingType === 'Hospital';
     const reportData = {
       ...formData,
       organizationId: orgId,
-      institutionName: isHospital ? undefined : searchTerm,
-      hospitalName: isHospital ? searchTerm : undefined,
+      institutionName: isMeeting ? (isHospital ? undefined : entityName) : (isCampaign ? entityName : undefined),
+      hospitalName: isMeeting ? (isHospital ? entityName : undefined) : undefined,
+      conferenceName: isConference ? entityName : undefined,
       id: reportToEdit?.id,
       status,
       date: new Date().toISOString().split('T')[0],
@@ -365,6 +394,265 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
 
   const renderFields = () => {
     const isHospital = formData.meetingType === 'Hospital';
+    const isMeeting = formData.activityType === 'Meeting with Organisation';
+    const isCampaign = formData.activityType === 'Campaigns Conducted';
+    const isConference = formData.activityType === 'Participation in Conferences';
+
+    if (isConference) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Card 1: Conference Profile */}
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-muted)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '24px',
+            backdropFilter: 'var(--glass-filter)'
+          }}>
+            <h4 style={{ color: 'var(--primary)', marginBottom: '16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+              Conference Profile
+            </h4>
+            <div className="form-grid">
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Conference Name</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input 
+                    type="text"
+                    className="form-input"
+                    placeholder="Enter conference name..."
+                    value={formData.conferenceName || ''}
+                    onChange={(e) => {
+                      handleChange('conferenceName', e.target.value);
+                      setSearchTerm(e.target.value);
+                    }}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Location</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input 
+                    type="text"
+                    className="form-input"
+                    placeholder="Street address, City, Region..."
+                    value={formData.location || ''}
+                    onChange={(e) => handleChange('location', e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Conference Scope Details */}
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-muted)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '24px',
+            backdropFilter: 'var(--glass-filter)'
+          }}>
+            <h4 style={{ color: 'var(--primary)', marginBottom: '16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+              Conference Scope Details
+            </h4>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Target Professionals</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input type="text" className="form-input" placeholder="e.g. Cardiologists, HR Managers..." value={formData.targetProfessionals || ''} onChange={e => handleChange('targetProfessionals', e.target.value)} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Number of Participants</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input type="number" className="form-input" placeholder="e.g. 500" value={formData.numberOfParticipants || ''} onChange={e => handleChange('numberOfParticipants', e.target.value ? Number(e.target.value) : undefined)} />
+                </div>
+              </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Number of Registrations</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input type="number" className="form-input" placeholder="Leads or signups captured..." value={formData.numberOfRegistrations || ''} onChange={e => handleChange('numberOfRegistrations', e.target.value ? Number(e.target.value) : undefined)} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Observations & Financials */}
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-muted)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '24px',
+            backdropFilter: 'var(--glass-filter)'
+          }}>
+            <h4 style={{ color: 'var(--primary)', marginBottom: '16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+              Observations & Financials
+            </h4>
+            <div className="form-grid">
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Cost of Visit ($)</label>
+                <div style={{ marginTop: '6px', position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <span style={{ position: 'absolute', left: '16px', color: 'var(--text-muted)', fontWeight: '600' }}>$</span>
+                  <input 
+                    type="number" 
+                    className="form-input" 
+                    placeholder="Total travel, dining, or miscellaneous expenses..."
+                    value={formData.costOfVisit || ''} 
+                    onChange={e => handleChange('costOfVisit', e.target.value ? Number(e.target.value) : undefined)} 
+                    style={{ paddingLeft: '32px' }}
+                  />
+                </div>
+              </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Marketing Observation</label>
+                <div style={{ marginTop: '6px' }}>
+                  <textarea 
+                    className="form-textarea" 
+                    placeholder="Document structural market patterns, competitor strategies, client needs, or key observations..."
+                    value={formData.marketingObservation || ''} 
+                    onChange={e => handleChange('marketingObservation', e.target.value)} 
+                    style={{ minHeight: '140px' }}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (isCampaign) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Card 1: Campaign Profile */}
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-muted)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '24px',
+            backdropFilter: 'var(--glass-filter)'
+          }}>
+            <h4 style={{ color: 'var(--primary)', marginBottom: '16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+              Campaign Profile
+            </h4>
+            <div className="form-grid">
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Institution Name</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input 
+                    type="text"
+                    className="form-input"
+                    placeholder="Enter institution name..."
+                    value={formData.institutionName || ''}
+                    onChange={(e) => {
+                      handleChange('institutionName', e.target.value);
+                      setSearchTerm(e.target.value);
+                    }}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Location</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input 
+                    type="text"
+                    className="form-input"
+                    placeholder="Street address, City, Region..."
+                    value={formData.location || ''}
+                    onChange={(e) => handleChange('location', e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Campaign Scope Details */}
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-muted)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '24px',
+            backdropFilter: 'var(--glass-filter)'
+          }}>
+            <h4 style={{ color: 'var(--primary)', marginBottom: '16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+              Campaign Scope Details
+            </h4>
+            <div className="form-grid">
+              <div className="form-group">
+                <label className="form-label">Number of Students Attended</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input type="number" className="form-input" placeholder="e.g. 150" value={formData.numberOfStudentsAttended || ''} onChange={e => handleChange('numberOfStudentsAttended', e.target.value ? Number(e.target.value) : undefined)} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Number of Students Registered</label>
+                <div style={{ marginTop: '6px' }}>
+                  <input type="number" className="form-input" placeholder="e.g. 75" value={formData.numberOfStudentsRegistered || ''} onChange={e => handleChange('numberOfStudentsRegistered', e.target.value ? Number(e.target.value) : undefined)} />
+                </div>
+              </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">List of Students Captured</label>
+                <div style={{ marginTop: '6px' }}>
+                  <textarea className="form-textarea" placeholder="Enter captured student names, classes, or paste link to spreadsheet..." value={formData.listOfStudentsCaptured || ''} onChange={e => handleChange('listOfStudentsCaptured', e.target.value)} style={{ minHeight: '90px' }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Observations & Financials */}
+          <div style={{
+            background: 'var(--bg-card)',
+            border: '1px solid var(--border-muted)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '24px',
+            backdropFilter: 'var(--glass-filter)'
+          }}>
+            <h4 style={{ color: 'var(--primary)', marginBottom: '16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
+              Observations & Financials
+            </h4>
+            <div className="form-grid">
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Cost of Visit ($)</label>
+                <div style={{ marginTop: '6px', position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <span style={{ position: 'absolute', left: '16px', color: 'var(--text-muted)', fontWeight: '600' }}>$</span>
+                  <input 
+                    type="number" 
+                    className="form-input" 
+                    placeholder="Total travel, dining, or miscellaneous expenses..."
+                    value={formData.costOfVisit || ''} 
+                    onChange={e => handleChange('costOfVisit', e.target.value ? Number(e.target.value) : undefined)} 
+                    style={{ paddingLeft: '32px' }}
+                  />
+                </div>
+              </div>
+              <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                <label className="form-label">Marketing Observation</label>
+                <div style={{ marginTop: '6px' }}>
+                  <textarea 
+                    className="form-textarea" 
+                    placeholder="Document structural market patterns, competitor strategies, client needs, or key observations..."
+                    value={formData.marketingObservation || ''} 
+                    onChange={e => handleChange('marketingObservation', e.target.value)} 
+                    style={{ minHeight: '140px' }}
+                    required
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -415,7 +703,7 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
                     top: 'calc(100% + 8px)', 
                     left: 0, 
                     right: 0, 
-                    backgroundColor: 'var(--bg-sidebar)', 
+                    backgroundColor: 'var(--bg-input)', 
                     border: '1px solid var(--border-muted)', 
                     borderRadius: 'var(--radius-md)', 
                     zIndex: 100, 
@@ -528,7 +816,7 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
                     style={{
                       cursor: 'pointer',
                       padding: '10px 14px',
-                      backgroundColor: 'var(--bg-sidebar)',
+                      backgroundColor: 'var(--bg-input)',
                       borderRadius: 'var(--radius-sm)',
                       border: '1px solid var(--border-muted)',
                       display: 'flex',
@@ -795,101 +1083,6 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
           </div>
         )}
 
-        {/* Dynamic Card 3: Additional Activity Information (Follow Ups, Campaigns, Conferences) */}
-        {(formData.activityType?.includes('Follow up') || formData.activityType === 'Campaigns Conducted' || formData.activityType === 'Participation in Conferences') && (
-          <div style={{
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-muted)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '24px',
-            backdropFilter: 'var(--glass-filter)'
-          }}>
-            <h4 style={{ color: 'var(--primary)', marginBottom: '16px', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--primary)' }} />
-              Activity Scope Details
-            </h4>
-            
-            <div className="form-grid">
-              {/* Follow ups */}
-              {formData.activityType?.includes('Follow up') && (
-                <>
-                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                    <label className="form-label">Mode of Meeting</label>
-                    <div style={{ marginTop: '6px' }}>
-                      <select className="form-select" value={formData.modeOfMeeting || ''} onChange={e => handleChange('modeOfMeeting', e.target.value)}>
-                        <option value="">Select Mode</option>
-                        <option>Physical</option>
-                        <option>Virtual</option>
-                        <option>Telephonic</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                    <label className="form-label">Feedback from Client</label>
-                    <div style={{ marginTop: '6px' }}>
-                      <textarea className="form-textarea" placeholder="Detail the outcome or notes from client follow up..." value={formData.feedbackFromClient || ''} onChange={e => handleChange('feedbackFromClient', e.target.value)} style={{ minHeight: '90px' }} />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Campaigns */}
-              {formData.activityType === 'Campaigns Conducted' && (
-                <>
-                  <div className="form-group">
-                    <label className="form-label">Number of Students Attended</label>
-                    <div style={{ marginTop: '6px' }}>
-                      <input type="number" className="form-input" placeholder="e.g. 150" value={formData.numberOfStudentsAttended || ''} onChange={e => handleChange('numberOfStudentsAttended', e.target.value ? Number(e.target.value) : undefined)} />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Number of Students Registered</label>
-                    <div style={{ marginTop: '6px' }}>
-                      <input type="number" className="form-input" placeholder="e.g. 75" value={formData.numberOfStudentsRegistered || ''} onChange={e => handleChange('numberOfStudentsRegistered', e.target.value ? Number(e.target.value) : undefined)} />
-                    </div>
-                  </div>
-                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                    <label className="form-label">List of Students Captured</label>
-                    <div style={{ marginTop: '6px' }}>
-                      <textarea className="form-textarea" placeholder="Enter captured student names, classes, or paste link to spreadsheet..." value={formData.listOfStudentsCaptured || ''} onChange={e => handleChange('listOfStudentsCaptured', e.target.value)} style={{ minHeight: '90px' }} />
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Conferences */}
-              {formData.activityType === 'Participation in Conferences' && (
-                <>
-                  <div className="form-group">
-                    <label className="form-label">Target Professionals</label>
-                    <div style={{ marginTop: '6px' }}>
-                      <input type="text" className="form-input" placeholder="e.g. Cardiologists, HR Managers..." value={formData.targetProfessionals || ''} onChange={e => handleChange('targetProfessionals', e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Number of Participants</label>
-                    <div style={{ marginTop: '6px' }}>
-                      <input type="number" className="form-input" placeholder="e.g. 500" value={formData.numberOfParticipants || ''} onChange={e => handleChange('numberOfParticipants', e.target.value ? Number(e.target.value) : undefined)} />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Foot Falls of Participants</label>
-                    <div style={{ marginTop: '6px' }}>
-                      <input type="number" className="form-input" placeholder="Booth traffic estimate..." value={formData.footFallsOfParticipants || ''} onChange={e => handleChange('footFallsOfParticipants', e.target.value ? Number(e.target.value) : undefined)} />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Number of Registrations</label>
-                    <div style={{ marginTop: '6px' }}>
-                      <input type="number" className="form-input" placeholder="Leads or signups captured..." value={formData.numberOfRegistrations || ''} onChange={e => handleChange('numberOfRegistrations', e.target.value ? Number(e.target.value) : undefined)} />
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Dynamic Card 4: Cost Analysis and Intelligence Observations */}
         <div style={{
           background: 'var(--bg-card)',
@@ -1069,8 +1262,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
                   style={{ 
                     padding: '12px 16px',
                     width: '100%',
-                    backgroundColor: 'var(--bg-sidebar)',
-                    border: '2px solid var(--border-muted)',
+                    backgroundColor: 'var(--bg-input)',
+                    border: '2px solid var(--border-input)',
                     borderRadius: 'var(--radius-md)',
                     color: 'var(--text-main)',
                     fontWeight: '700',

@@ -15,6 +15,7 @@ import { ExpenseTracker } from '../../components/ExpenseTracker';
 import { AdminExpenseTracker } from '../../components/AdminExpenseTracker';
 import { OrganizationProfilesView } from '../../components/OrganizationProfilesView';
 import { SVGCharts } from '../../components/SVGCharts';
+import { AdminAnalytics } from '../../components/AdminAnalytics';
 import { isAdminRole, isStaffRole } from '../../lib/roles';
 
 export default function DashboardPage() {
@@ -357,6 +358,9 @@ export default function DashboardPage() {
                     </div>
                   </section>
 
+                  {/* Modern Analytics Graphs */}
+                  <AdminAnalytics reports={reports} />
+
                   {/* ========================================================
                       REPORT MANAGEMENT (CARDS VIEW)
                       ======================================================== */}
@@ -421,10 +425,6 @@ export default function DashboardPage() {
                               report={rep}
                               onInspect={handleInspectReport}
                               getStatusBadgeClass={getStatusBadgeClass}
-                              // Mock handlers for action buttons since backend/state mutation isn't specified in context for these yet
-                              onApprove={() => console.log('Approve', rep.id)}
-                              onReject={() => console.log('Reject', rep.id)}
-                              onDelete={() => console.log('Delete', rep.id)}
                             />
                           ))}
                         </div>

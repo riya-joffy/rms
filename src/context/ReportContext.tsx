@@ -19,6 +19,7 @@ interface ReportContextType {
     }
   ) => Promise<void>;
   reviewReport: (reportId: string, status: 'Approved' | 'Rejected', feedback: string) => void;
+  deleteReport: (reportId: string) => Promise<void>;
   refreshAllData: () => void;
   addOrganization: (orgData: Omit<Organization, 'id'>) => Promise<Organization | void>;
   updateOrganization: (orgId: string, orgData: Partial<Organization>) => Promise<void>;
@@ -131,6 +132,14 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const deleteReport = async (reportId: string) => {
+    if (!user || !isAdminRole(user.role)) return;
+    await dbService.deleteReport(reportId, user.id, user.name);
+    if (!isFirebaseActive()) {
+      loadLocalData();
+    }
+  };
+
   const refreshAllData = () => {
     loadLocalData();
   };
@@ -179,6 +188,7 @@ export const ReportProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         loading,
         createReport,
         reviewReport,
+        deleteReport,
         refreshAllData,
         addOrganization,
         updateOrganization,

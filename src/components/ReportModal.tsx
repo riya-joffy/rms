@@ -12,7 +12,7 @@ interface ReportModalProps {
 }
 
 export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, currentUser }) => {
-  const { reviewReport } = useReports();
+  const { reviewReport, deleteReport } = useReports();
   const [feedbackInput, setFeedbackInput] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -34,6 +34,23 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
       setIsSubmitting(false);
       onClose();
     }, 400);
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Are you sure you want to permanently delete this report? This action cannot be undone.')) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      await deleteReport(report.id);
+      onClose();
+    } catch (error) {
+      console.error('Error deleting report:', error);
+      alert('Failed to delete report. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getStatusBadgeClass = (status: string) => {
@@ -316,6 +333,17 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
 
         {/* Modal Footer Controls */}
         <div className="modal-footer">
+          {isAdminRole(currentUser.role) && (
+            <button 
+              className="btn btn-danger" 
+              onClick={handleDelete}
+              disabled={isSubmitting}
+              style={{ marginRight: 'auto' }}
+            >
+              Delete Report
+            </button>
+          )}
+
           <button className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>
             Close
           </button>

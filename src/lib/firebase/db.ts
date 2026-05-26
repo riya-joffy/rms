@@ -1072,6 +1072,34 @@ export const dbService = {
     return undefined;
   },
 
+  deleteReport: async (reportId: string, userId: string, userName: string): Promise<void> => {
+    if (!isFirebaseActive()) {
+      const reports = dbService.getReports();
+      const filtered = reports.filter(r => r.id !== reportId);
+      setStorageItem(KEYS.REPORTS, filtered);
+
+      await dbService.addLog({
+        userId,
+        userName,
+        userRole: 'admin',
+        action: 'Deleted Report',
+        details: `Deleted report document ID ${reportId}.`
+      });
+      return;
+    }
+
+    const reportDocRef = doc(db, 'reports', reportId);
+    await deleteDoc(reportDocRef);
+
+    await dbService.addLog({
+      userId,
+      userName,
+      userRole: 'admin',
+      action: 'Deleted Report',
+      details: `Deleted report document ID ${reportId}.`
+    });
+  },
+
   // --- LOGS ---
   getLogs: (): ActivityLog[] => {
     if (!isFirebaseActive()) {

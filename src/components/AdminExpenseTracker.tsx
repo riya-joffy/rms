@@ -1005,8 +1005,8 @@ export const AdminExpenseTracker: React.FC<AdminExpenseTrackerProps> = ({
                 const staffAvatar = staffAvatarById[report.staffId] || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80';
                 
                 // Deterministic client breakdown percentages based on activity type
-                const isHospital = report.activityType.toLowerCase().includes('hospital');
-                const isConference = report.activityType.toLowerCase().includes('conference');
+                const isHospital = report.activityType.toLowerCase().includes('hospital') || report.meetingType === 'Hospital' || !!report.hospitalName;
+                const isConference = report.activityType.toLowerCase().includes('conference') || report.meetingType === 'Conference' || !!report.conferenceName;
                 
                 let pTravel = 45;
                 let pLodging = 35;
