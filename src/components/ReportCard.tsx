@@ -30,9 +30,11 @@ export const ReportCard: React.FC<ReportCardProps> = ({
           <div className="rc-staff-name">{report.staffName}</div>
           <div className="rc-department">{report.department}</div>
         </div>
-        <div className="rc-status">
-          <span className={getStatusBadgeClass(report.status)}>{report.status}</span>
-        </div>
+        {report.status !== 'Pending' && (
+          <div className="rc-status">
+            <span className={getStatusBadgeClass(report.status)}>{report.status}</span>
+          </div>
+        )}
       </div>
       
       <div className="rc-body">
@@ -57,7 +59,7 @@ export const ReportCard: React.FC<ReportCardProps> = ({
         <div className="rc-row">
           <span className="rc-label">Cost:</span>
           <span className="rc-value" style={{ fontFamily: 'var(--font-mono)' }}>
-            {report.costOfVisit !== undefined ? `$${report.costOfVisit}` : '-'}
+            {report.costOfVisit !== undefined ? `₹${report.costOfVisit}` : '-'}
           </span>
         </div>
         

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MarketReport, Organization } from '../types';
 import { useReports } from '../context/ReportContext';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'react-toastify';
 
 interface CreateReportFormProps {
   onSuccess: () => void;
@@ -57,6 +58,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileExpanded, setProfileExpanded] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitType, setSubmitType] = useState<'Draft' | 'Pending' | null>(null);
   
   const wrapperRef = useRef<HTMLDivElement>(null);
 
@@ -319,6 +322,8 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
   };
 
   const submitFinal = async (status: 'Draft' | 'Pending') => {
+    if (submitting) return;
+
     const isMeeting = formData.activityType === 'Meeting with Organisation';
     const isCampaign = formData.activityType === 'Campaigns Conducted';
     const isConference = formData.activityType === 'Participation in Conferences';
@@ -358,10 +363,17 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
       }
     }
     
+    setSubmitting(true);
+    setSubmitType(status);
+
     // Only Meetings use the CRM organization search/profile database
     let orgId: string | undefined = undefined;
     if (isMeeting) {
-      orgId = await checkAndSaveOrganization();
+      try {
+        orgId = await checkAndSaveOrganization();
+      } catch (err) {
+        console.error('Failed to save organization profile:', err);
+      }
     }
 
     const isHospital = formData.meetingType === 'Hospital';
@@ -380,10 +392,23 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
 
     try {
       await createReport(reportData);
-      onSuccess();
+      toast.success(status === 'Draft' ? "Draft saved successfully" : "Report submitted successfully", {
+        position: "top-right",
+        autoClose: 2500,
+      });
+      // Delay navigation slightly so the toast appears first
+      setTimeout(() => {
+        onSuccess();
+      }, 500);
     } catch (err) {
       console.error('Failed to save report:', err);
-      alert('Failed to save report. Please try again.');
+      toast.error(status === 'Draft' ? "Failed to save draft" : "Failed to submit report", {
+        position: "top-right",
+        autoClose: 3000,
+      });
+    } finally {
+      setSubmitting(false);
+      setSubmitType(null);
     }
   };
 
@@ -494,9 +519,9 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
             </h4>
             <div className="form-grid">
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label className="form-label">Cost of Visit ($)</label>
+                <label className="form-label">Cost of Visit (₹)</label>
                 <div style={{ marginTop: '6px', position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ position: 'absolute', left: '16px', color: 'var(--text-muted)', fontWeight: '600' }}>$</span>
+                  <span style={{ position: 'absolute', left: '16px', color: 'var(--text-muted)', fontWeight: '600' }}>₹</span>
                   <input 
                     type="number" 
                     className="form-input" 
@@ -622,9 +647,9 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
             </h4>
             <div className="form-grid">
               <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                <label className="form-label">Cost of Visit ($)</label>
+                <label className="form-label">Cost of Visit (₹)</label>
                 <div style={{ marginTop: '6px', position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ position: 'absolute', left: '16px', color: 'var(--text-muted)', fontWeight: '600' }}>$</span>
+                  <span style={{ position: 'absolute', left: '16px', color: 'var(--text-muted)', fontWeight: '600' }}>₹</span>
                   <input 
                     type="number" 
                     className="form-input" 
@@ -1098,9 +1123,9 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
           
           <div className="form-grid">
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
-              <label className="form-label">Cost of Visit ($)</label>
+              <label className="form-label">Cost of Visit (₹)</label>
               <div style={{ marginTop: '6px', position: 'relative', display: 'flex', alignItems: 'center' }}>
-                <span style={{ position: 'absolute', left: '16px', color: 'var(--text-muted)', fontWeight: '600' }}>$</span>
+                <span style={{ position: 'absolute', left: '16px', color: 'var(--text-muted)', fontWeight: '600' }}>₹</span>
                 <input 
                   type="number" 
                   className="form-input" 
@@ -1327,6 +1352,7 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
           className="btn btn-secondary" 
           onClick={onCancel}
           style={{ border: '1px solid var(--border-muted)' }}
+          disabled={submitting}
         >
           Cancel
         </button>
@@ -1337,6 +1363,7 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
             className="btn" 
             onClick={handleReset}
             style={{ backgroundColor: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.3)', color: 'var(--error-text)' }}
+            disabled={submitting}
           >
             Reset Form
           </button>
@@ -1346,15 +1373,26 @@ export const CreateReportForm: React.FC<CreateReportFormProps> = ({ onSuccess, o
             className="btn" 
             onClick={() => submitFinal('Draft')}
             style={{ backgroundColor: 'transparent', border: '1px solid var(--primary)', color: 'var(--primary)' }}
+            disabled={submitting}
           >
-            Save Draft
+            {submitting && submitType === 'Draft' ? 'Saving...' : 'Save Draft'}
           </button>
 
           <button 
             type="submit" 
             className="btn btn-primary"
+            disabled={submitting}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center' }}
           >
-            Submit Report
+            {submitting && submitType === 'Pending' ? (
+              <>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ animation: 'spin 1s linear infinite' }}>
+                  <circle cx="12" cy="12" r="10" strokeOpacity="0.1" />
+                  <path d="M12 2a10 10 0 0 1 10 10" />
+                </svg>
+                Submitting...
+              </>
+            ) : 'Submit Report'}
           </button>
         </div>
       </div>

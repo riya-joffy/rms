@@ -18,7 +18,9 @@ import {
 } from 'recharts';
 import { MarketReport, User } from '../types';
 import { isAdminRole } from '../lib/roles';
-import { exportToXML, exportToJPG, exportToPDF } from '../lib/expenseExportUtils';
+import { exportToPDF } from '../lib/expenseExportUtils';
+import { exportExpensesToExcel } from '../lib/excelExportUtils';
+import { toast } from 'react-toastify';
 
 interface AdminExpenseTrackerProps {
   reports: MarketReport[];
@@ -37,7 +39,7 @@ const MONTH_NAMES = [
 const CHART_COLORS = ['#a855f7', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e'];
 
 const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
 
 const getReportLabel = (report: MarketReport) =>
   report.institutionName || report.hospitalName || report.conferenceName || report.activityType;
@@ -67,10 +69,49 @@ export const AdminExpenseTracker: React.FC<AdminExpenseTrackerProps> = ({
   const [sortField, setSortField] = useState<SortField>('cost');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
 
-  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false);
-  const [exportStatus, setExportStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [exportFormat, setExportFormat] = useState<'PDF' | 'XML' | 'JPG' | null>(null);
-  const [exportError, setExportError] = useState<string | null>(null);
+  // New Filters UI State
+  const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [hospitalFilter, setHospitalFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
+
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportType, setExportType] = useState<'EXCEL' | 'PDF' | null>(null);
+
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  const minSwipeDistance = 50;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = (numSlides: number) => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    if (isLeftSwipe) {
+      setCurrentSlide(prev => (prev === numSlides - 1 ? 0 : prev + 1));
+    } else if (isRightSwipe) {
+      setCurrentSlide(prev => (prev === 0 ? numSlides - 1 : prev - 1));
+    }
+  };
+
+  const prevSlide = () => {
+    setCurrentSlide(prev => (prev === 0 ? 3 : prev - 1));
+  };
+
+  const nextSlide = () => {
+    setCurrentSlide(prev => (prev === 3 ? 0 : prev + 1));
+  };
 
   const staffUsers = useMemo(
     () => users.filter((u) => !isAdminRole(u.role)),
@@ -107,14 +148,66 @@ export const AdminExpenseTracker: React.FC<AdminExpenseTrackerProps> = ({
     return Array.from(keys).sort((a, b) => b.localeCompare(a));
   }, [submittedReports]);
 
-  // Date Range overrides Month Filter if active
+  // Compute unique categories and hospitals/organisations
+  const categories = useMemo(() => {
+    const keys = new Set<string>();
+    submittedReports.forEach((r) => {
+      if (r.activityType) keys.add(r.activityType);
+    });
+    return Array.from(keys).sort();
+  }, [submittedReports]);
+
+  const hospitals = useMemo(() => {
+    const keys = new Set<string>();
+    submittedReports.forEach((r) => {
+      const name = r.institutionName || r.hospitalName || r.conferenceName;
+      if (name) keys.add(name);
+    });
+    return Array.from(keys).sort();
+  }, [submittedReports]);
+
+  // Date Range overrides Month Filter if active, respects all UI filters
   const filteredReports = useMemo(() => {
     let list = [...submittedReports];
 
+    // 1. Staff Filter
     if (staffFilter !== 'All') {
       list = list.filter((r) => r.staffId === staffFilter);
     }
+
+    // 2. Keyword Search
+    if (searchTerm) {
+      const lower = searchTerm.toLowerCase();
+      list = list.filter((r) => {
+        const staffName = staffNameById[r.staffId] || r.staffName || '';
+        const instHosp = r.institutionName || r.hospitalName || r.conferenceName || '';
+        const title = `${r.activityType} - ${instHosp}`;
+        const obs = r.observations || r.marketingObservation || '';
+        return title.toLowerCase().includes(lower) || 
+               obs.toLowerCase().includes(lower) || 
+               staffName.toLowerCase().includes(lower);
+      });
+    }
+
+    // 3. Category
+    if (categoryFilter !== 'All') {
+      list = list.filter((r) => r.activityType === categoryFilter);
+    }
+
+    // 4. Hospital/Organisation
+    if (hospitalFilter !== 'All') {
+      list = list.filter((r) => {
+        const name = r.institutionName || r.hospitalName || r.conferenceName || '';
+        return name === hospitalFilter;
+      });
+    }
+
+    // 5. Status
+    if (statusFilter !== 'All') {
+      list = list.filter((r) => r.status === statusFilter);
+    }
     
+    // 6. Date / Month quick selector
     if (fromDate || toDate) {
       list = list.filter((r) => {
         const matchFrom = !fromDate || r.date >= fromDate;
@@ -143,7 +236,7 @@ export const AdminExpenseTracker: React.FC<AdminExpenseTrackerProps> = ({
     });
 
     return list;
-  }, [submittedReports, staffFilter, monthFilter, fromDate, toDate, sortField, sortOrder, staffNameById]);
+  }, [submittedReports, staffFilter, searchTerm, categoryFilter, hospitalFilter, statusFilter, monthFilter, fromDate, toDate, sortField, sortOrder, staffNameById]);
 
   const reportsWithCost = useMemo(
     () => filteredReports.filter((r) => (r.costOfVisit ?? 0) > 0),
@@ -272,13 +365,13 @@ export const AdminExpenseTracker: React.FC<AdminExpenseTrackerProps> = ({
   }, [reportsWithCost, staffNameById]);
 
   // --- Export Handling ---
-  const handleExportStart = async (format: 'PDF' | 'XML' | 'JPG') => {
-    setIsExportDropdownOpen(false);
-    setExportFormat(format);
-    setExportStatus('loading');
-    setExportError(null);
+  const handleExportStart = async (type: 'EXCEL' | 'PDF') => {
+    setIsExporting(true);
+    setExportType(type);
 
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    const toastId = toast.loading(type === 'EXCEL' ? "Generating Excel..." : "Generating PDF...");
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     try {
       const totals = {
@@ -288,18 +381,45 @@ export const AdminExpenseTracker: React.FC<AdminExpenseTrackerProps> = ({
         topStaffSpender,
       };
 
-      if (format === 'XML') {
-        exportToXML(filteredReports, staffNameById, { staff: staffFilter, month: monthFilter, fromDate, toDate }, totals);
-      } else if (format === 'JPG') {
-        await exportToJPG('.expense-charts-grid', `staff-expenses-analytics_${new Date().toISOString().slice(0, 10)}.jpg`);
-      } else if (format === 'PDF') {
-        await exportToPDF(filteredReports, staffNameById, { staff: staffFilter, month: monthFilter, fromDate, toDate }, totals, '.expense-charts-grid');
+      const filterMeta = {
+        staff: staffFilter === 'All' ? 'All Staff' : (staffNameById[staffFilter] || staffFilter),
+        month: monthFilter,
+        fromDate,
+        toDate,
+        searchTerm,
+        category: categoryFilter,
+        hospital: hospitalFilter,
+        status: statusFilter
+      };
+
+      if (type === 'PDF') {
+        await exportToPDF(filteredReports, staffNameById, filterMeta, totals, '.expense-charts-grid');
+        toast.update(toastId, {
+          render: "PDF exported successfully",
+          type: "success",
+          isLoading: false,
+          autoClose: 3000
+        });
+      } else if (type === 'EXCEL') {
+        exportExpensesToExcel(filteredReports, staffNameById, filterMeta);
+        toast.update(toastId, {
+          render: "Excel exported successfully",
+          type: "success",
+          isLoading: false,
+          autoClose: 3000
+        });
       }
-      setExportStatus('success');
     } catch (e: any) {
       console.error(e);
-      setExportError(e?.message || 'Failed to compile and download export file.');
-      setExportStatus('error');
+      toast.update(toastId, {
+        render: "Export failed",
+        type: "error",
+        isLoading: false,
+        autoClose: 3000
+      });
+    } finally {
+      setIsExporting(false);
+      setExportType(null);
     }
   };
 
@@ -315,16 +435,9 @@ export const AdminExpenseTracker: React.FC<AdminExpenseTrackerProps> = ({
   return (
     <div className="expense-tracker">
       <style>{`
-        .dropdown-item:hover {
-          background-color: HSLA(224, 40%, 12%, 0.8) !important;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-4px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes modalScaleUp {
-          from { opacity: 0; transform: scale(0.95); }
-          to { opacity: 1; transform: scale(1); }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
       `}</style>
 
@@ -336,293 +449,272 @@ export const AdminExpenseTracker: React.FC<AdminExpenseTrackerProps> = ({
             Monitor and audit organizational visit costs, marketing expenses, and spending summaries
           </span>
         </div>
-        <div className="filters-row" style={{ position: 'relative' }}>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={isExporting}
+            onClick={() => handleExportStart('EXCEL')}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              minWidth: '160px',
+              justifyContent: 'center',
+              borderColor: 'var(--border-muted)',
+              opacity: isExporting ? 0.6 : 1,
+              cursor: isExporting ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {isExporting && exportType === 'EXCEL' ? (
+              <>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  style={{ animation: 'spin 1s linear infinite' }}
+                >
+                  <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="8" />
+                </svg>
+                Generating Excel...
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" strokeWidth="2.5">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                  <line x1="9" y1="9" x2="15" y2="15" />
+                  <line x1="15" y1="9" x2="9" y2="15" />
+                </svg>
+                Export to Excel
+              </>
+            )}
+          </button>
+
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
-            style={{ minWidth: '140px' }}
+            disabled={isExporting}
+            onClick={() => handleExportStart('PDF')}
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '8px', 
+              minWidth: '150px',
+              justifyContent: 'center',
+              opacity: isExporting ? 0.6 : 1,
+              cursor: isExporting ? 'not-allowed' : 'pointer'
+            }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Export Data
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              style={{
-                marginLeft: '4px',
-                transform: isExportDropdownOpen ? 'rotate(180deg)' : 'none',
-                transition: 'transform var(--transition-fast)',
-              }}
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+            {isExporting && exportType === 'PDF' ? (
+              <>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  style={{ animation: 'spin 1s linear infinite' }}
+                >
+                  <circle cx="12" cy="12" r="10" strokeDasharray="32" strokeDashoffset="8" />
+                </svg>
+                Generating PDF...
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                Export to PDF
+              </>
+            )}
           </button>
-
-          {isExportDropdownOpen && (
-            <>
-              <div
-                style={{
-                  position: 'fixed',
-                  inset: 0,
-                  zIndex: 99,
-                }}
-                onClick={() => setIsExportDropdownOpen(false)}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  marginTop: '8px',
-                  backgroundColor: 'var(--bg-sidebar)',
-                  border: '1px solid var(--border-muted)',
-                  borderRadius: 'var(--radius-md)',
-                  boxShadow: 'var(--shadow-lg), var(--shadow-glow)',
-                  zIndex: 100,
-                  minWidth: '180px',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  animation: 'fadeIn 0.15s ease-out',
-                }}
-              >
-                <button
-                  type="button"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 16px',
-                    width: '100%',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    transition: 'background var(--transition-fast)',
-                  }}
-                  className="dropdown-item"
-                  onClick={() => handleExportStart('PDF')}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2.5">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                  </svg>
-                  Export as PDF
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 16px',
-                    width: '100%',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    borderTop: '1px solid var(--border-muted)',
-                    transition: 'background var(--transition-fast)',
-                  }}
-                  className="dropdown-item"
-                  onClick={() => handleExportStart('XML')}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--info)" strokeWidth="2.5">
-                    <polyline points="16 18 22 12 16 6" />
-                    <polyline points="8 6 2 12 8 18" />
-                  </svg>
-                  Export as XML
-                </button>
-                <button
-                  type="button"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 16px',
-                    width: '100%',
-                    textAlign: 'left',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    borderTop: '1px solid var(--border-muted)',
-                    transition: 'background var(--transition-fast)',
-                  }}
-                  className="dropdown-item"
-                  onClick={() => handleExportStart('JPG')}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="2.5">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <circle cx="8.5" cy="8.5" r="1.5" />
-                    <polyline points="21 15 16 10 5 21" />
-                  </svg>
-                  Export as JPG
-                </button>
-              </div>
-            </>
-          )}
         </div>
       </div>
 
-      {/* Export Interactive Modal */}
-      {exportStatus !== 'idle' && (
-        <div
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(10px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-          }}
-        >
-          <div
-            style={{
-              background: 'linear-gradient(135deg, HSLA(224, 40%, 10%, 0.85), HSLA(224, 40%, 6%, 0.95))',
-              border: '1px solid var(--border-muted)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '40px',
-              maxWidth: '460px',
-              width: '90%',
-              textAlign: 'center',
-              boxShadow: 'var(--shadow-lg), var(--shadow-glow)',
-              animation: 'modalScaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '24px',
-            }}
-          >
-            {exportStatus === 'loading' && (
-              <>
-                <div style={{ position: 'relative', width: '64px', height: '64px' }}>
-                  <svg
-                    width="64"
-                    height="64"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="var(--primary)"
-                    strokeWidth="2.5"
-                    style={{ animation: 'spin 1.2s linear infinite' }}
-                  >
-                    <circle cx="12" cy="12" r="10" strokeOpacity="0.1" />
-                    <path d="M12 2a10 10 0 0 1 10 10" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '8px' }}>
-                    Compiling {exportFormat} Export
-                  </h3>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    {exportFormat === 'PDF' && 'Rendering charts, compiling ledger tables and structuring executive formatting...'}
-                    {exportFormat === 'XML' && 'Parsing expense fields and generating standard readable data structures...'}
-                    {exportFormat === 'JPG' && 'Capturing analytics visualizations and rendering high-resolution snapshot...'}
-                  </p>
-                </div>
-              </>
-            )}
+      {/* Search Bar and Filter Controls */}
+      <div className="table-card" style={{ marginBottom: '24px', padding: '24px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="table-title" style={{ margin: 0 }}>Filter & Sort Controls</div>
+            
+            <div className="filters-row">
+              <select
+                className="filter-select"
+                value={staffFilter}
+                onChange={(e) => setStaffFilter(e.target.value)}
+                aria-label="Filter by staff"
+              >
+                <option value="All">All staff</option>
+                {staffUsers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
 
-            {exportStatus === 'success' && (
-              <>
-                <div
-                  style={{
-                    width: '64px',
-                    height: '64px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--success-glow)',
-                    border: '2px solid var(--success)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 0 20px var(--success-glow)',
-                    color: 'var(--success)',
-                  }}
-                >
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '8px', color: 'var(--success-text)' }}>
-                    Export Successful!
-                  </h3>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    Your high-quality {exportFormat} file was generated and downloaded automatically.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => setExportStatus('idle')}
-                  style={{ width: '100%', marginTop: '8px', borderColor: 'var(--border-muted)' }}
-                >
-                  Close Window
-                </button>
-              </>
-            )}
+              <select
+                className="filter-select"
+                value={`${sortField}-${sortOrder}`}
+                onChange={(e) => {
+                  const [field, order] = e.target.value.split('-') as [SortField, SortOrder];
+                  setSortField(field);
+                  setSortOrder(order);
+                }}
+                aria-label="Sort expenses"
+              >
+                <option value="cost-desc">Highest cost</option>
+                <option value="cost-asc">Lowest cost</option>
+                <option value="date-desc">Newest first</option>
+                <option value="date-asc">Oldest first</option>
+                <option value="staff-asc">Staff A–Z</option>
+                <option value="staff-desc">Staff Z–A</option>
+              </select>
+            </div>
+          </div>
 
-            {exportStatus === 'error' && (
-              <>
-                <div
-                  style={{
-                    width: '64px',
-                    height: '64px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--error-glow)',
-                    border: '2px solid var(--error)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 0 20px var(--error-glow)',
-                    color: 'var(--error)',
-                  }}
+          {/* New row of inputs: Search keyword, Category, Hospital, Status */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center' }}>
+            {/* Search Input */}
+            <div style={{ flex: '1', minWidth: '240px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label htmlFor="adminSearchBar" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Search Keyword</label>
+              <input
+                id="adminSearchBar"
+                type="text"
+                placeholder="Search title, observations, staff..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  background: 'var(--bg-input)',
+                  border: '1px solid var(--border-input)',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-main)',
+                  fontSize: '0.85rem',
+                  width: '100%'
+                }}
+              />
+            </div>
+
+            {/* Category Filter */}
+            <div style={{ minWidth: '150px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label htmlFor="adminCategorySelector" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Category</label>
+              <select
+                id="adminCategorySelector"
+                className="filter-select"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px' }}
+              >
+                <option value="All">All Categories</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Hospital/Organisation Filter */}
+            <div style={{ minWidth: '180px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label htmlFor="adminHospitalSelector" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Hospital / Org</label>
+              <select
+                id="adminHospitalSelector"
+                className="filter-select"
+                value={hospitalFilter}
+                onChange={(e) => setHospitalFilter(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px' }}
+              >
+                <option value="All">All Organisations</option>
+                {hospitals.map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status Filter */}
+            <div style={{ minWidth: '130px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label htmlFor="adminStatusSelector" style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--text-muted)' }}>Status</label>
+              <select
+                id="adminStatusSelector"
+                className="filter-select"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px' }}
+              >
+                <option value="All">All Statuses</option>
+                <option value="Approved">Approved</option>
+                <option value="Pending">Pending</option>
+                <option value="Rejected">Rejected</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', background: 'HSLA(224, 40%, 6%, 0.4)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-muted)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Scope Date Range:</span>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label htmlFor="adminFromDateInput" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>From</label>
+              <input
+                id="adminFromDateInput"
+                type="date"
+                className="filter-select"
+                style={{ padding: '8px 12px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 'var(--radius-sm)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <label htmlFor="adminToDateInput" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>To</label>
+              <input
+                id="adminToDateInput"
+                type="date"
+                className="filter-select"
+                style={{ padding: '8px 12px', background: 'var(--bg-input)', border: '1px solid var(--border-input)', borderRadius: 'var(--radius-sm)', color: 'var(--text-main)', fontSize: '0.85rem' }}
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+              />
+            </div>
+
+            {(fromDate || toDate) ? (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleClearDates}
+                style={{ padding: '8px 12px', fontSize: '0.8rem', borderColor: 'var(--border-muted)' }}
+              >
+                Clear Range
+              </button>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-dark)' }}>Or Quick Selector:</span>
+                <select
+                  className="filter-select"
+                  value={monthFilter}
+                  onChange={(e) => setMonthFilter(e.target.value)}
+                  aria-label="Filter by month"
+                  style={{ padding: '8px 12px', fontSize: '0.85rem' }}
                 >
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '1.25rem', fontWeight: '800', marginBottom: '8px', color: 'var(--error-text)' }}>
-                    Export Failed
-                  </h3>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                    {exportError || 'An error occurred during export compiling.'}
-                  </p>
-                </div>
-                <div style={{ display: 'flex', gap: '12px', width: '100%', marginTop: '8px' }}>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setExportStatus('idle')}
-                    style={{ flex: 1, borderColor: 'var(--border-muted)' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => exportFormat && handleExportStart(exportFormat)}
-                    style={{ flex: 1 }}
-                  >
-                    Retry Export
-                  </button>
-                </div>
-              </>
+                  <option value="All">All months</option>
+                  {availableMonths.map((m) => (
+                    <option key={m} value={m}>
+                      {formatMonthLabel(m)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
         </div>
-      )}
+      </div>
 
       {/* KPI Cards Grid */}
-      <section className="stats-grid">
+      <section className="stats-grid" style={{ marginBottom: '24px' }}>
         <div className="stat-card">
           <div className="stat-header">
             <span className="stat-title">Total Staff Spending</span>
@@ -724,274 +816,313 @@ export const AdminExpenseTracker: React.FC<AdminExpenseTrackerProps> = ({
       )}
 
       {/* Symmetrical 4-Chart Grid */}
-      <div className="expense-charts-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(480px, 1fr))', gap: '24px', margin: '24px 0' }}>
-        {/* Chart 1: Team Spending Trend */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">
-              <h3>Monthly team spending</h3>
-              <p>Cumulative visit costs across all staff over dates</p>
+      <div 
+        className="expense-charts-grid" 
+        style={{ 
+          display: 'block', 
+          position: 'relative', 
+          overflow: 'hidden', 
+          padding: '0 48px',
+          margin: '24px 0'
+        }}
+      >
+        <div 
+          style={{ 
+            overflow: 'hidden',
+            width: '100%',
+            position: 'relative'
+          }}
+        >
+          <div 
+            style={{ 
+              display: 'flex', 
+              transform: `translateX(-${currentSlide * 100}%)`, 
+              transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
+              width: '100%'
+            }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={() => handleTouchEnd(4)}
+          >
+            {/* Slide 1: Team Spending Trend */}
+            <div style={{ width: '100%', flexShrink: 0, padding: '0 8px', boxSizing: 'border-box' }}>
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">
+                    <h3>Monthly team spending</h3>
+                    <p>Cumulative visit costs across all staff over dates</p>
+                  </div>
+                </div>
+                {trendChartData.length > 0 ? (
+                  <div className="expense-chart-wrap">
+                    <ResponsiveContainer width="100%" height={240}>
+                      <AreaChart data={trendChartData} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="adminTrendGlow" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.4} />
+                            <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" vertical={false} />
+                        <XAxis dataKey="date" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} />
+                        <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${v}`} />
+                        <Tooltip
+                          contentStyle={{
+                            background: 'var(--bg-sidebar)',
+                            border: '1px solid var(--border-muted)',
+                            borderRadius: '8px',
+                            color: 'var(--text-main)',
+                            fontSize: '11px',
+                          }}
+                          formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Spent']}
+                        />
+                        <Area type="monotone" dataKey="amount" stroke="var(--primary)" strokeWidth={2.5} fillOpacity={1} fill="url(#adminTrendGlow)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="expense-empty-chart">
+                    <p>No expense data in the selected filters.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Slide 2: Category Pie (Donut Chart) */}
+            <div style={{ width: '100%', flexShrink: 0, padding: '0 8px', boxSizing: 'border-box' }}>
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">
+                    <h3>Expense Categories</h3>
+                    <p>Total spend grouped by institutional activity type</p>
+                  </div>
+                </div>
+                {categoryChartData.length > 0 ? (
+                  <div className="expense-chart-wrap" style={{ display: 'flex', alignItems: 'center' }}>
+                    <ResponsiveContainer width="100%" height={240}>
+                      <PieChart>
+                        <Pie
+                          data={categoryChartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={50}
+                          outerRadius={80}
+                          paddingAngle={3}
+                          dataKey="value"
+                        >
+                          {categoryChartData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            background: 'var(--bg-sidebar)',
+                            border: '1px solid var(--border-muted)',
+                            borderRadius: '8px',
+                            color: 'var(--text-main)',
+                            fontSize: '11px',
+                          }}
+                          formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Spent']}
+                        />
+                        <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '10px', color: 'var(--text-muted)' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="expense-empty-chart">
+                    <p>No activity expenses reported.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Slide 3: Staff comparison bar graph */}
+            <div style={{ width: '100%', flexShrink: 0, padding: '0 8px', boxSizing: 'border-box' }}>
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">
+                    <h3>Spending by staff</h3>
+                    <p>Total visit costs per team member (top 8 Spenders)</p>
+                  </div>
+                </div>
+                {staffChartData.length > 0 ? (
+                  <div className="expense-chart-wrap">
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={staffChartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" vertical={false} />
+                        <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} />
+                        <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `₹${v}`} />
+                        <Tooltip
+                          contentStyle={{
+                            background: 'var(--bg-sidebar)',
+                            border: '1px solid var(--border-muted)',
+                            borderRadius: '8px',
+                            color: 'var(--text-main)',
+                            fontSize: '11px',
+                          }}
+                          formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Total spent']}
+                          labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ''}
+                        />
+                        <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                          {staffChartData.map((_, i) => (
+                            <Cell key={i} fill={CHART_COLORS[(i + 4) % CHART_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="expense-empty-chart">
+                    <p>No staff expense records found.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Slide 4: Activity-wise spending graph */}
+            <div style={{ width: '100%', flexShrink: 0, padding: '0 8px', boxSizing: 'border-box' }}>
+              <div className="chart-card">
+                <div className="chart-card-header">
+                  <div className="chart-card-title">
+                    <h3>Activity Spending Comparison</h3>
+                    <p>Total cumulative costs compared across activity types</p>
+                  </div>
+                </div>
+                {activityChartData.length > 0 ? (
+                  <div className="expense-chart-wrap">
+                    <ResponsiveContainer width="100%" height={240}>
+                      <BarChart data={activityChartData} layout="vertical" margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" horizontal={false} />
+                        <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} tickFormatter={(v) => `₹${v}`} />
+                        <YAxis type="category" dataKey="activity" width={110} tick={{ fill: 'var(--text-muted)', fontSize: 9 }} tickLine={false} />
+                        <Tooltip
+                          contentStyle={{
+                            background: 'var(--bg-sidebar)',
+                            border: '1px solid var(--border-muted)',
+                            borderRadius: '8px',
+                            color: 'var(--text-main)',
+                            fontSize: '11px',
+                          }}
+                          formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Spent']}
+                        />
+                        <Bar dataKey="amount" fill="var(--info)" radius={[0, 4, 4, 0]} maxBarSize={20} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="expense-empty-chart">
+                    <p>No individual reports with recorded visit costs found.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-          {trendChartData.length > 0 ? (
-            <div className="expense-chart-wrap">
-              <ResponsiveContainer width="100%" height={240}>
-                <AreaChart data={trendChartData} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="adminTrendGlow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} />
-                  <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip
-                    contentStyle={{
-                      background: 'var(--bg-sidebar)',
-                      border: '1px solid var(--border-muted)',
-                      borderRadius: '8px',
-                      color: 'var(--text-main)',
-                      fontSize: '11px',
-                    }}
-                    formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Spent']}
-                  />
-                  <Area type="monotone" dataKey="amount" stroke="var(--primary)" strokeWidth={2.5} fillOpacity={1} fill="url(#adminTrendGlow)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="expense-empty-chart">
-              <p>No expense data in the selected filters.</p>
-            </div>
-          )}
         </div>
 
-        {/* Chart 2: Category Pie (Donut Chart) */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">
-              <h3>Expense Categories</h3>
-              <p>Total spend grouped by institutional activity type</p>
-            </div>
-          </div>
-          {categoryChartData.length > 0 ? (
-            <div className="expense-chart-wrap" style={{ display: 'flex', alignItems: 'center' }}>
-              <ResponsiveContainer width="100%" height={240}>
-                <PieChart>
-                  <Pie
-                    data={categoryChartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={50}
-                    outerRadius={80}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {categoryChartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      background: 'var(--bg-sidebar)',
-                      border: '1px solid var(--border-muted)',
-                      borderRadius: '8px',
-                      color: 'var(--text-main)',
-                      fontSize: '11px',
-                    }}
-                    formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Spent']}
-                  />
-                  <Legend verticalAlign="bottom" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '10px', color: 'var(--text-muted)' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="expense-empty-chart">
-              <p>No activity expenses reported.</p>
-            </div>
-          )}
-        </div>
+        {/* Navigation Controls */}
+        <button
+          type="button"
+          onClick={prevSlide}
+          aria-label="Previous chart"
+          style={{
+            position: 'absolute',
+            left: '4px',
+            top: 'calc(50% - 18px)',
+            width: '36px',
+            height: '36px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid var(--border-muted)',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 10,
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'var(--text-main)';
+            e.currentTarget.style.borderColor = 'var(--primary)';
+            e.currentTarget.style.boxShadow = '0 0 12px var(--primary-glow)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--text-muted)';
+            e.currentTarget.style.borderColor = 'var(--border-muted)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
 
-        {/* Chart 3: Staff comparison bar graph */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">
-              <h3>Spending by staff</h3>
-              <p>Total visit costs per team member (top 8 Spenders)</p>
-            </div>
-          </div>
-          {staffChartData.length > 0 ? (
-            <div className="expense-chart-wrap">
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={staffChartData} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} />
-                  <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip
-                    contentStyle={{
-                      background: 'var(--bg-sidebar)',
-                      border: '1px solid var(--border-muted)',
-                      borderRadius: '8px',
-                      color: 'var(--text-main)',
-                      fontSize: '11px',
-                    }}
-                    formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Total spent']}
-                    labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ''}
-                  />
-                  <Bar dataKey="total" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                    {staffChartData.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[(i + 4) % CHART_COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="expense-empty-chart">
-              <p>No staff expense records found.</p>
-            </div>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={nextSlide}
+          aria-label="Next chart"
+          style={{
+            position: 'absolute',
+            right: '4px',
+            top: 'calc(50% - 18px)',
+            width: '36px',
+            height: '36px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid var(--border-muted)',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 10,
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'var(--text-main)';
+            e.currentTarget.style.borderColor = 'var(--primary)';
+            e.currentTarget.style.boxShadow = '0 0 12px var(--primary-glow)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--text-muted)';
+            e.currentTarget.style.borderColor = 'var(--border-muted)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
 
-        {/* Chart 4: Activity-wise spending graph */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">
-              <h3>Activity Spending Comparison</h3>
-              <p>Total cumulative costs compared across activity types</p>
-            </div>
-          </div>
-          {activityChartData.length > 0 ? (
-            <div className="expense-chart-wrap">
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={activityChartData} layout="vertical" margin={{ top: 8, right: 16, left: 16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} tickFormatter={(v) => `$${v}`} />
-                  <YAxis type="category" dataKey="activity" width={110} tick={{ fill: 'var(--text-muted)', fontSize: 9 }} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{
-                      background: 'var(--bg-sidebar)',
-                      border: '1px solid var(--border-muted)',
-                      borderRadius: '8px',
-                      color: 'var(--text-main)',
-                      fontSize: '11px',
-                    }}
-                    formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Spent']}
-                  />
-                  <Bar dataKey="amount" fill="var(--info)" radius={[0, 4, 4, 0]} maxBarSize={20} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="expense-empty-chart">
-              <p>No individual reports with recorded visit costs found.</p>
-            </div>
-          )}
+        {/* Pagination Dots */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px' }}>
+          {[0, 1, 2, 3].map((idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setCurrentSlide(idx)}
+              aria-label={`Go to slide ${idx + 1}`}
+              style={{
+                width: currentSlide === idx ? '24px' : '8px',
+                height: '8px',
+                borderRadius: '4px',
+                backgroundColor: currentSlide === idx ? 'var(--primary)' : 'var(--border-muted)',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Scoping and Filtering Panel */}
-      <div className="table-card" style={{ marginTop: '24px' }}>
-        <div className="table-header-bar" style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'stretch' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div className="table-title">Operational Spending Ledger</div>
-            
-            {/* Filter selectors */}
-            <div className="filters-row">
-              <select
-                className="filter-select"
-                value={staffFilter}
-                onChange={(e) => setStaffFilter(e.target.value)}
-                aria-label="Filter by staff"
-              >
-                <option value="All">All staff</option>
-                {staffUsers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                className="filter-select"
-                value={`${sortField}-${sortOrder}`}
-                onChange={(e) => {
-                  const [field, order] = e.target.value.split('-') as [SortField, SortOrder];
-                  setSortField(field);
-                  setSortOrder(order);
-                }}
-                aria-label="Sort expenses"
-              >
-                <option value="cost-desc">Highest cost</option>
-                <option value="cost-asc">Lowest cost</option>
-                <option value="date-desc">Newest first</option>
-                <option value="date-asc">Oldest first</option>
-                <option value="staff-asc">Staff A–Z</option>
-                <option value="staff-desc">Staff Z–A</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Date pickers & Range Scoping row */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', background: 'HSLA(224, 40%, 6%, 0.4)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-muted)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '0.8rem', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Scope Date Range:</span>
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label htmlFor="adminFromDateInput" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>From</label>
-              <input
-                id="adminFromDateInput"
-                type="date"
-                className="filter-select"
-                style={{ padding: '8px 12px', background: 'var(--bg-sidebar)', border: '1px solid var(--border-muted)', borderRadius: 'var(--radius-sm)', color: 'var(--text-main)', fontSize: '0.85rem' }}
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <label htmlFor="adminToDateInput" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>To</label>
-              <input
-                id="adminToDateInput"
-                type="date"
-                className="filter-select"
-                style={{ padding: '8px 12px', background: 'var(--bg-sidebar)', border: '1px solid var(--border-muted)', borderRadius: 'var(--radius-sm)', color: 'var(--text-main)', fontSize: '0.85rem' }}
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
-            </div>
-
-            {(fromDate || toDate) ? (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                onClick={handleClearDates}
-                style={{ padding: '8px 12px', fontSize: '0.8rem', borderColor: 'var(--border-muted)' }}
-              >
-                Clear Range
-              </button>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-dark)' }}>Or Quick Selector:</span>
-                <select
-                  className="filter-select"
-                  value={monthFilter}
-                  onChange={(e) => setMonthFilter(e.target.value)}
-                  aria-label="Filter by month"
-                  style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                >
-                  <option value="All">All months</option>
-                  {availableMonths.map((m) => (
-                    <option key={m} value={m}>
-                      {formatMonthLabel(m)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
+      {/* Operational Spending Ledger */}
+      <div className="table-card" style={{ marginBottom: '24px' }}>
+        <div className="table-header-bar" style={{ padding: '24px 24px 0 24px' }}>
+          <div className="table-title">Operational Spending Ledger</div>
         </div>
 
         {/* Responsive Report Cards display */}

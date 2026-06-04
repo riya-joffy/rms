@@ -14,7 +14,6 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose }) => 
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [role, setRole] = useState<UserRole>('staff');
-  const [department, setDepartment] = useState('Unassigned');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -47,7 +46,7 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose }) => 
           name: username.trim(),
           email: email.trim(),
           role,
-          department: department.trim() || 'Unassigned',
+          department: 'Unassigned',
           avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(username.trim())}&background=random`,
           status: 'active',
           lastActive: new Date().toISOString(),
@@ -121,17 +120,6 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({ onClose }) => 
                 <option value="staff">Staff</option>
                 <option value="admin">Admin</option>
               </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Department</label>
-              <input
-                type="text"
-                className="form-input"
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                placeholder="e.g. Market Analysis"
-              />
             </div>
 
             <div className="form-group">

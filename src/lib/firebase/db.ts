@@ -1,5 +1,6 @@
-import { User, MarketReport, ActivityLog, Notification, DashboardStats, Organization } from '../../types';
+import { User, MarketReport, ActivityLog, Notification, DashboardStats, Organization, MonthlyTargetItem } from '../../types';
 import { db } from './firebase';
+
 import { 
   collection, 
   doc, 
@@ -14,11 +15,13 @@ import {
   setDoc,
   deleteDoc,
   onSnapshot,
+  serverTimestamp,
   type QueryDocumentSnapshot,
   type DocumentData,
 } from 'firebase/firestore';
 import { isAdminRole, resolveUserRole } from '../roles';
 import { createAuthUser } from './createAuthUser';
+
 
 // Helper to determine if real Firebase is configured
 export const isFirebaseActive = (): boolean => {
@@ -100,17 +103,18 @@ const DEFAULT_ORGANIZATIONS: Organization[] = [
 const DEFAULT_USERS: User[] = [
   {
     id: 'A-101',
-    name: 'Riya Joffy',
+    name: 'riya',
     email: 'riyajoffy1@gmail.com',
     role: 'admin',
     department: 'Operations',
     avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
     status: 'active',
     lastActive: '2026-05-21T15:27:00Z',
+    emailVerified: true,
   },
   {
     id: 'S-201',
-    name: 'Zandra Kanja',
+    name: 'zandra',
     email: 'zandrakanja@gmail.com',
     role: 'staff',
     department: 'Market Analysis',
@@ -118,39 +122,7 @@ const DEFAULT_USERS: User[] = [
     avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
     status: 'active',
     lastActive: '2026-05-21T15:30:00Z',
-  },
-  {
-    id: 'S-202',
-    name: 'Marcus Chen',
-    email: 'marcus.chen@gmail.com',
-    role: 'staff',
-    department: 'Field Surveys',
-    region: 'Europe',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
-    status: 'active',
-    lastActive: '2026-05-25T11:20:00Z',
-  },
-  {
-    id: 'S-203',
-    name: 'Eleanor Vance',
-    email: 'eleanor.vance@gmail.com',
-    role: 'staff',
-    department: 'Clinical Outreach',
-    region: 'Asia Pacific',
-    avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150',
-    status: 'active',
-    lastActive: '2026-05-24T09:45:00Z',
-  },
-  {
-    id: 'S-204',
-    name: 'Geo Joffy',
-    email: 'geojoffy@gmail.com',
-    role: 'staff',
-    department: 'Relationship Management',
-    region: 'Kerala',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-    status: 'active',
-    lastActive: '2026-05-26T09:00:00Z',
+    emailVerified: true,
   }
 ];
 
@@ -585,6 +557,54 @@ const DEFAULT_LOGS: ActivityLog[] = [
 
 const DEFAULT_NOTIFICATIONS: Notification[] = [];
 
+const DEFAULT_HOSPITAL_TARGETS: MonthlyTargetItem[] = [
+  {
+    id: 'ht-1',
+    target: 100,
+    month: 'May 2026',
+    achievedPersons: 78,
+    updatedAt: '2026-05-01T00:00:00Z'
+  },
+  {
+    id: 'ht-2',
+    target: 90,
+    month: 'Apr 2026',
+    achievedPersons: 82,
+    updatedAt: '2026-04-01T00:00:00Z'
+  },
+  {
+    id: 'ht-3',
+    target: 80,
+    month: 'Mar 2026',
+    achievedPersons: 75,
+    updatedAt: '2026-03-01T00:00:00Z'
+  }
+];
+
+const DEFAULT_INSTITUTE_TARGETS: MonthlyTargetItem[] = [
+  {
+    id: 'it-1',
+    target: 120,
+    month: 'May 2026',
+    achievedPersons: 95,
+    updatedAt: '2026-05-01T00:00:00Z'
+  },
+  {
+    id: 'it-2',
+    target: 110,
+    month: 'Apr 2026',
+    achievedPersons: 102,
+    updatedAt: '2026-04-01T00:00:00Z'
+  },
+  {
+    id: 'it-3',
+    target: 100,
+    month: 'Mar 2026',
+    achievedPersons: 88,
+    updatedAt: '2026-03-01T00:00:00Z'
+  }
+];
+
 // Helper to initialize and retrieve local storage keys
 const getStorageItem = <T>(key: string, defaultValue: T): T => {
   if (typeof window === 'undefined') return defaultValue;
@@ -612,6 +632,8 @@ const KEYS = {
   NOTIFICATIONS: 'rms_db_notifications',
   ORGANIZATIONS: 'rms_db_organizations',
   CREDENTIALS: 'rms_user_credentials',
+  HOSPITAL_TARGETS: 'rms_db_hospital_targets',
+  INSTITUTE_TARGETS: 'rms_db_institute_targets',
 };
 
 // Cached values for live queries (sync context)
@@ -620,6 +642,10 @@ let liveUsersCache: User[] = [];
 let liveLogsCache: ActivityLog[] = [];
 let liveNotificationsCache: Notification[] = [];
 let liveOrganizationsCache: Organization[] = [];
+let liveHospitalTargetsCache: MonthlyTargetItem[] = [];
+let liveInstituteTargetsCache: MonthlyTargetItem[] = [];
+
+
 
 const mapReportDoc = (snap: QueryDocumentSnapshot<DocumentData>): MarketReport => {
   const data = snap.data() as MarketReport;
@@ -733,7 +759,23 @@ export const dbService = {
   // --- USERS ---
   getUsers: (): User[] => {
     if (!isFirebaseActive()) {
-      return getStorageItem(KEYS.USERS, DEFAULT_USERS);
+      const stored = getStorageItem<User[]>(KEYS.USERS, DEFAULT_USERS);
+      const cleaned = stored.filter(u => ['riyajoffy1@gmail.com', 'zandrakanja@gmail.com'].includes(u.email.toLowerCase().trim()));
+      const updated = cleaned.map(u => {
+        if (u.email.toLowerCase().trim() === 'riyajoffy1@gmail.com') {
+          return { ...u, name: 'riya', role: 'admin' as const };
+        }
+        if (u.email.toLowerCase().trim() === 'zandrakanja@gmail.com') {
+          return { ...u, name: 'zandra', role: 'staff' as const };
+        }
+        return u;
+      });
+
+      if (stored.length !== updated.length || stored.some((u, i) => u.name !== updated[i]?.name || u.role !== updated[i]?.role)) {
+        setStorageItem(KEYS.USERS, updated);
+        return updated;
+      }
+      return stored;
     }
     return liveUsersCache;
   },
@@ -752,6 +794,7 @@ export const dbService = {
         email: userData.email.trim(),
         role: resolveUserRole(userData.role, userData.email),
         id: `U-${Date.now()}`,
+        emailVerified: false,
       };
       users.push(newUser);
       setStorageItem(KEYS.USERS, users);
@@ -800,7 +843,7 @@ export const dbService = {
     return newUser;
   },
 
-  updateUserStatus: (userId: string, status: 'active' | 'suspended', adminName: string): User[] => {
+  updateUserStatus: async (userId: string, status: 'active' | 'disabled', adminName: string): Promise<User[]> => {
     if (!isFirebaseActive()) {
       const users = dbService.getUsers();
       const index = users.findIndex(u => u.id === userId);
@@ -810,12 +853,12 @@ export const dbService = {
         users[index] = user;
         setStorageItem(KEYS.USERS, users);
 
-        dbService.addLog({
+        await dbService.addLog({
           userId: 'A-101',
           userName: adminName,
           userRole: 'admin',
           action: status === 'active' ? 'Activated User' : 'Deactivated User',
-          details: `${status === 'active' ? 'Activated' : 'Suspended'} staff account of ${user.name}.`
+          details: `${status === 'active' ? 'Activated' : 'Disabled'} staff account of ${user.name}.`
         });
 
       }
@@ -825,20 +868,101 @@ export const dbService = {
     // LIVE FIRESTORE IMPLEMENTATION
     console.log("[DbService] Updating user access status in live Firestore...");
     const userDocRef = doc(db, 'users', userId);
-    updateDoc(userDocRef, { status }).then(() => {
-      // Async record activity log and notifications in Firestore
-      dbService.addLog({
-        userId: 'A-101',
-        userName: adminName,
-        userRole: 'admin',
-        action: status === 'active' ? 'Activated User' : 'Deactivated User',
-        details: `${status === 'active' ? 'Activated' : 'Suspended'} account of user UID: ${userId}.`
-      });
-
+    await updateDoc(userDocRef, { status });
+    
+    // Record activity log and notifications in Firestore
+    await dbService.addLog({
+      userId: 'A-101',
+      userName: adminName,
+      userRole: 'admin',
+      action: status === 'active' ? 'Activated User' : 'Deactivated User',
+      details: `${status === 'active' ? 'Activated' : 'Disabled'} account of user UID: ${userId}.`
     });
 
     // In live mode, UI sync is driven by the snapshot listeners in Context, return current cache
     return liveUsersCache;
+  },
+
+  updateUser: async (userId: string, updatedData: Partial<User>, adminName: string): Promise<User> => {
+    if (!isFirebaseActive()) {
+      const users = dbService.getUsers();
+      const index = users.findIndex(u => u.id === userId);
+      if (index === -1) {
+        throw new Error('User not found.');
+      }
+      const oldUser = users[index];
+      const newUser = { ...oldUser, ...updatedData };
+      users[index] = newUser;
+      setStorageItem(KEYS.USERS, users);
+
+      await dbService.addLog({
+        userId: 'A-101',
+        userName: adminName,
+        userRole: 'admin',
+        action: 'Updated User Details',
+        details: `Updated details for staff account of ${newUser.name}.`
+      });
+
+      return newUser;
+    }
+
+    // LIVE FIRESTORE
+    console.log("[DbService] Updating user in live Firestore...");
+    const userDocRef = doc(db, 'users', userId);
+    await updateDoc(userDocRef, updatedData);
+
+    const oldUserInCache = liveUsersCache.find(u => u.id === userId);
+    const updatedUser = {
+      ...(oldUserInCache || {}),
+      ...updatedData
+    } as User;
+    upsertUserInCache(updatedUser);
+
+    await dbService.addLog({
+      userId: 'A-101',
+      userName: adminName,
+      userRole: 'admin',
+      action: 'Updated User Details',
+      details: `Updated details for user UID: ${userId} in Firestore.`
+    });
+
+    return updatedUser;
+  },
+
+  deleteUser: async (userId: string, adminName: string): Promise<void> => {
+    if (!isFirebaseActive()) {
+      const users = dbService.getUsers();
+      const userToDelete = users.find(u => u.id === userId);
+      if (!userToDelete) {
+        throw new Error('User not found.');
+      }
+      const filtered = users.filter(u => u.id !== userId);
+      setStorageItem(KEYS.USERS, filtered);
+
+      await dbService.addLog({
+        userId: 'A-101',
+        userName: adminName,
+        userRole: 'admin',
+        action: 'Deleted User',
+        details: `Deleted staff account of ${userToDelete.name}.`
+      });
+      return;
+    }
+
+    // LIVE FIRESTORE
+    console.log("[DbService] Deleting user from live Firestore...");
+    const userDocRef = doc(db, 'users', userId);
+    await deleteDoc(userDocRef);
+
+    liveUsersCache = liveUsersCache.filter(u => u.id !== userId);
+
+    await dbService.addLog({
+      userId: 'A-101',
+      userName: adminName,
+      userRole: 'admin',
+      action: 'Deleted User',
+      details: `Deleted user UID: ${userId} from Firestore.`
+    });
   },
 
   // --- REPORTS ---
@@ -1330,5 +1454,173 @@ export const dbService = {
       unsubOrganizations();
       console.log("[DbService] Unsubscribed real-time queries.");
     };
+  },
+
+  // --- HOSPITAL TARGETS ---
+  getHospitalTargets: (): MonthlyTargetItem[] => {
+    if (!isFirebaseActive()) {
+      const stored = getStorageItem<MonthlyTargetItem[]>(KEYS.HOSPITAL_TARGETS, DEFAULT_HOSPITAL_TARGETS);
+      if (stored.length === 0) {
+        setStorageItem(KEYS.HOSPITAL_TARGETS, DEFAULT_HOSPITAL_TARGETS);
+        return DEFAULT_HOSPITAL_TARGETS;
+      }
+      return stored;
+    }
+    return liveHospitalTargetsCache;
+  },
+
+  subscribeHospitalTargets: (onTargetsChange: (targets: MonthlyTargetItem[]) => void): (() => void) => {
+    if (!isFirebaseActive()) {
+      onTargetsChange(dbService.getHospitalTargets());
+      return () => {};
+    }
+
+    const unsub = onSnapshot(collection(db, 'hospitalTargets'), (snap) => {
+      const items = snap.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          ...data,
+          id: doc.id,
+        } as MonthlyTargetItem;
+      });
+      liveHospitalTargetsCache = items;
+      onTargetsChange(items);
+    });
+
+    return unsub;
+  },
+
+  addHospitalTarget: async (targetData: Omit<MonthlyTargetItem, 'id' | 'updatedAt'>): Promise<MonthlyTargetItem> => {
+    if (!isFirebaseActive()) {
+      const targets = dbService.getHospitalTargets();
+      const newTarget: MonthlyTargetItem = {
+        ...targetData,
+        id: `ht-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        updatedAt: new Date().toISOString()
+      };
+      targets.push(newTarget);
+      setStorageItem(KEYS.HOSPITAL_TARGETS, targets);
+      return newTarget;
+    }
+
+    const docRef = await addDoc(collection(db, 'hospitalTargets'), {
+      ...targetData,
+      updatedAt: serverTimestamp()
+    });
+    
+    await updateDoc(doc(db, 'hospitalTargets', docRef.id), { id: docRef.id });
+
+    return {
+      ...targetData,
+      id: docRef.id,
+      updatedAt: new Date().toISOString()
+    };
+  },
+
+  updateHospitalTarget: async (targetId: string, updatedFields: Partial<Omit<MonthlyTargetItem, 'id' | 'updatedAt'>>): Promise<void> => {
+    if (!isFirebaseActive()) {
+      const targets = dbService.getHospitalTargets();
+      const index = targets.findIndex(t => t.id === targetId);
+      if (index !== -1) {
+        targets[index] = {
+          ...targets[index],
+          ...updatedFields,
+          updatedAt: new Date().toISOString()
+        };
+        setStorageItem(KEYS.HOSPITAL_TARGETS, targets);
+      }
+      return;
+    }
+
+    const docRef = doc(db, 'hospitalTargets', targetId);
+    await updateDoc(docRef, {
+      ...updatedFields,
+      updatedAt: serverTimestamp()
+    });
+  },
+
+  // --- INSTITUTE TARGETS ---
+  getInstituteTargets: (): MonthlyTargetItem[] => {
+    if (!isFirebaseActive()) {
+      const stored = getStorageItem<MonthlyTargetItem[]>(KEYS.INSTITUTE_TARGETS, DEFAULT_INSTITUTE_TARGETS);
+      if (stored.length === 0) {
+        setStorageItem(KEYS.INSTITUTE_TARGETS, DEFAULT_INSTITUTE_TARGETS);
+        return DEFAULT_INSTITUTE_TARGETS;
+      }
+      return stored;
+    }
+    return liveInstituteTargetsCache;
+  },
+
+  subscribeInstituteTargets: (onTargetsChange: (targets: MonthlyTargetItem[]) => void): (() => void) => {
+    if (!isFirebaseActive()) {
+      onTargetsChange(dbService.getInstituteTargets());
+      return () => {};
+    }
+
+    const unsub = onSnapshot(collection(db, 'instituteTargets'), (snap) => {
+      const items = snap.docs.map((doc) => {
+        const data = doc.data();
+        return {
+          ...data,
+          id: doc.id,
+        } as MonthlyTargetItem;
+      });
+      liveInstituteTargetsCache = items;
+      onTargetsChange(items);
+    });
+
+    return unsub;
+  },
+
+  addInstituteTarget: async (targetData: Omit<MonthlyTargetItem, 'id' | 'updatedAt'>): Promise<MonthlyTargetItem> => {
+    if (!isFirebaseActive()) {
+      const targets = dbService.getInstituteTargets();
+      const newTarget: MonthlyTargetItem = {
+        ...targetData,
+        id: `it-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        updatedAt: new Date().toISOString()
+      };
+      targets.push(newTarget);
+      setStorageItem(KEYS.INSTITUTE_TARGETS, targets);
+      return newTarget;
+    }
+
+    const docRef = await addDoc(collection(db, 'instituteTargets'), {
+      ...targetData,
+      updatedAt: serverTimestamp()
+    });
+    
+    await updateDoc(doc(db, 'instituteTargets', docRef.id), { id: docRef.id });
+
+    return {
+      ...targetData,
+      id: docRef.id,
+      updatedAt: new Date().toISOString()
+    };
+  },
+
+  updateInstituteTarget: async (targetId: string, updatedFields: Partial<Omit<MonthlyTargetItem, 'id' | 'updatedAt'>>): Promise<void> => {
+    if (!isFirebaseActive()) {
+      const targets = dbService.getInstituteTargets();
+      const index = targets.findIndex(t => t.id === targetId);
+      if (index !== -1) {
+        targets[index] = {
+          ...targets[index],
+          ...updatedFields,
+          updatedAt: new Date().toISOString()
+        };
+        setStorageItem(KEYS.INSTITUTE_TARGETS, targets);
+      }
+      return;
+    }
+
+    const docRef = doc(db, 'instituteTargets', targetId);
+    await updateDoc(docRef, {
+      ...updatedFields,
+      updatedAt: serverTimestamp()
+    });
   }
 };
+
+

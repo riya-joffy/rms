@@ -26,8 +26,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
   const adminNavItems = [
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'organization-profiles', label: 'Organization Profiles' },
-    { id: 'staff', label: 'Staff Directory' },
     { id: 'staff-expenses', label: 'Staff Expenses' },
+    { id: 'staff', label: 'Staff Directory' },
   ];
 
   const navItems = isAdmin ? adminNavItems : staffNavItems;

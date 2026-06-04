@@ -8,7 +8,7 @@ export const MONTH_NAMES = [
 export const CHART_COLORS = ['#a855f7', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e'];
 
 export const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
 
 export const getReportLabel = (report: MarketReport) =>
   report.institutionName || report.hospitalName || report.conferenceName || report.activityType;

@@ -11,12 +11,18 @@ import { CreateReportForm } from '../../components/CreateReportForm';
 import { MarketReport } from '../../types';
 import { ReportCard } from '../../components/ReportCard';
 import { CreateUserModal } from '../../components/CreateUserModal';
+import { ToggleStatusModal } from '../../components/ToggleStatusModal';
+import { DeleteUserModal } from '../../components/DeleteUserModal';
+import { User } from '../../types';
 import { ExpenseTracker } from '../../components/ExpenseTracker';
 import { AdminExpenseTracker } from '../../components/AdminExpenseTracker';
 import { OrganizationProfilesView } from '../../components/OrganizationProfilesView';
 import { SVGCharts } from '../../components/SVGCharts';
 import { AdminAnalytics } from '../../components/AdminAnalytics';
 import { isAdminRole, isStaffRole } from '../../lib/roles';
+import { MonthlyTargetDashboard } from '../../components/MonthlyTargetDashboard';
+
+
 
 export default function DashboardPage() {
   const { user, users, toggleUserStatus, loading: authLoading } = useAuth();
@@ -36,6 +42,21 @@ export default function DashboardPage() {
   const [selectedReport, setSelectedReport] = useState<MarketReport | null>(null);
   const [reportToEdit, setReportToEdit] = useState<MarketReport | null>(null);
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [userToToggleStatus, setUserToToggleStatus] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const showSuccessToast = (message: string) => setToast({ message, type: 'success' });
+  const showErrorToast = (message: string) => setToast({ message, type: 'error' });
 
   // Verification redirect
   useEffect(() => {
@@ -56,6 +77,8 @@ export default function DashboardPage() {
     if (isAdminRole(user.role) && !['dashboard', 'organization-profiles', 'staff', 'staff-expenses'].includes(activeTab)) {
       setActiveTab('dashboard');
     }
+
+
   }, [activeTab, setActiveTab, user]);
 
   if (authLoading || !user) {
@@ -199,11 +222,15 @@ export default function DashboardPage() {
                   {/* Operational Submissions Graph */}
                   <SVGCharts reports={reports.filter(r => r.staffId === user.id)} />
 
+                  {/* Monthly Targets Analytics */}
+                  <MonthlyTargetDashboard />
+
+
                   {/* My Submissions & Drafts Tracker */}
                   <div className="table-card" style={{ marginTop: '24px' }}>
                     <div className="table-header-bar">
                       <div className="table-title">My Submissions & Drafts Tracker</div>
-                      <div className="filters-row">
+                      <div className="filters-row" style={{ display: 'flex', gap: '12px' }}>
                         <button 
                           className="btn btn-primary"
                           onClick={() => { setReportToEdit(null); setActiveTab('create-report'); }}
@@ -361,6 +388,10 @@ export default function DashboardPage() {
                   {/* Modern Analytics Graphs */}
                   <AdminAnalytics reports={reports} />
 
+                  {/* Monthly Targets Analytics */}
+                  <MonthlyTargetDashboard />
+
+
                   {/* ========================================================
                       REPORT MANAGEMENT (CARDS VIEW)
                       ======================================================== */}
@@ -411,7 +442,6 @@ export default function DashboardPage() {
                           <option value="Asia Pacific">Asia Pacific</option>
                           <option value="Latin America">Latin America</option>
                         </select>
-
                       </div>
                     </div>
 
@@ -460,7 +490,7 @@ export default function DashboardPage() {
                     Total registered operational agents: {users.length}
                   </span>
                 </div>
-                <div className="filters-row">
+                <div className="filters-row" style={{ display: 'flex', gap: '12px' }}>
                   <button 
                     className="btn btn-primary"
                     onClick={() => setShowCreateUserModal(true)}
@@ -478,21 +508,16 @@ export default function DashboardPage() {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Staff ID</th>
                       <th>Full Name</th>
                       <th>Email Address</th>
                       <th>Role</th>
-                      <th>Assigned Department</th>
-                      <th>Active Region Focus</th>
                       <th>Permission Status</th>
-                      <th>Last Active Timestamp</th>
-                      <th style={{ textAlign: 'right' }}>Security Actions</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {users.map((staff) => (
                       <tr key={staff.id}>
-                        <td style={{ fontFamily: 'var(--font-mono)', fontWeight: '700' }}>{staff.id}</td>
                         <td>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <img src={staff.avatar} alt={staff.name} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} />
@@ -505,27 +530,62 @@ export default function DashboardPage() {
                             {staff.role === 'admin' ? 'Admin' : 'Staff'}
                           </span>
                         </td>
-                        <td>{staff.department}</td>
-                        <td>{staff.region || 'All Markets'}</td>
                         <td>
-                          <span className={`badge ${staff.status === 'active' ? 'active' : 'suspended'}`}>
-                            {staff.status === 'active' ? 'Active' : 'Suspended'}
+                          <span className={`badge ${staff.status === 'active' ? 'active' : 'disabled'}`}>
+                            {staff.status === 'active' ? 'Active' : 'Disabled'}
                           </span>
                         </td>
-                        <td style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                          {staff.lastActive ? new Date(staff.lastActive).toLocaleString() : 'Never logged in'}
-                        </td>
                         <td style={{ textAlign: 'right' }}>
-                          {staff.role === 'admin' ? (
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-dark)', fontStyle: 'italic' }}>Immutable Admin</span>
-                          ) : (
-                            <button 
-                              className={`btn btn-sm ${staff.status === 'active' ? 'btn-danger' : 'btn-primary'}`}
-                              onClick={() => toggleUserStatus(staff.id)}
-                            >
-                              {staff.status === 'active' ? 'Suspend Account' : 'Activate Account'}
-                            </button>
-                          )}
+                          <div style={{ display: 'inline-flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                            {staff.id === user.id ? (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                disabled
+                                style={{ padding: '6px 12px', minHeight: '30px', minWidth: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, cursor: 'not-allowed' }}
+                                title="You cannot disable your own admin account"
+                              >
+                                Disable
+                              </button>
+                            ) : (
+                              <button
+                                className={`btn btn-sm ${staff.status === 'active' ? 'btn-danger' : 'btn-primary'}`}
+                                onClick={() => setUserToToggleStatus(staff)}
+                                style={{ padding: '6px 12px', minHeight: '30px', minWidth: '70px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              >
+                                {staff.status === 'active' ? 'Disable' : 'Enable'}
+                              </button>
+                            )}
+
+                            {staff.id === user.id ? (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                disabled
+                                style={{ padding: '6px', minHeight: '30px', minWidth: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.4, cursor: 'not-allowed' }}
+                                title="You cannot delete your own account"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                  <line x1="10" y1="11" x2="10" y2="17" />
+                                  <line x1="14" y1="11" x2="14" y2="17" />
+                                </svg>
+                              </button>
+                            ) : (
+                              <button
+                                className="btn btn-secondary btn-sm rc-btn-delete"
+                                onClick={() => setUserToDelete(staff)}
+                                style={{ padding: '6px', minHeight: '30px', minWidth: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                title="Delete Staff Member"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6" />
+                                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                  <line x1="10" y1="11" x2="10" y2="17" />
+                                  <line x1="14" y1="11" x2="14" y2="17" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -579,6 +639,7 @@ export default function DashboardPage() {
             />
           )}
 
+
         </main>
       </div>
 
@@ -600,6 +661,51 @@ export default function DashboardPage() {
       {/* B. Create User Modal */}
       {showCreateUserModal && (
         <CreateUserModal onClose={() => setShowCreateUserModal(false)} />
+      )}
+
+      {/* C. Toggle Status Confirmation Modal */}
+      {userToToggleStatus && (
+        <ToggleStatusModal
+          userToToggle={userToToggleStatus}
+          onClose={() => setUserToToggleStatus(null)}
+        />
+      )}
+
+      {/* D. Delete User Modal */}
+      {userToDelete && (
+        <DeleteUserModal
+          userToDelete={userToDelete}
+          onClose={() => setUserToDelete(null)}
+          onSuccess={showSuccessToast}
+          onError={showErrorToast}
+        />
+      )}
+
+      {/* E. Toast Notifications */}
+      {toast && (
+        <div className="toast-container">
+          <div className={`toast-box ${toast.type}`}>
+            <div className={`toast-icon ${toast.type}`}>
+              {toast.type === 'success' ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              )}
+            </div>
+            <span className="toast-message">{toast.message}</span>
+            <button className="toast-close" onClick={() => setToast(null)} aria-label="Close notification">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
       )}
 
     </div>

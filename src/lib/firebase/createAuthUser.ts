@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, signOut, sendEmailVerification } from 'firebase/auth';
 
 /**
  * Creates a Firebase Auth account using a secondary app instance
@@ -14,6 +14,15 @@ export async function createAuthUser(email: string, password: string): Promise<s
   try {
     const credential = await createUserWithEmailAndPassword(secondaryAuth, email.trim(), password);
     const uid = credential.user.uid;
+    
+    // Automatically trigger verification email
+    try {
+      await sendEmailVerification(credential.user);
+      console.log('[Auth] Sent Firebase verification email to', email);
+    } catch (verifError) {
+      console.error('[Auth] Failed to send verification email during creation:', verifError);
+    }
+
     await signOut(secondaryAuth);
     return uid;
   } catch (error: unknown) {

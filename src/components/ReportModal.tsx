@@ -273,7 +273,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({ report, onClose, curre
               <div className="report-detail-block" style={{ gridColumn: 'span 2' }}>
                 <span className="report-detail-label">Cost of Visit</span>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--bg-sidebar)', padding: '10px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-muted)', color: 'var(--text-main)', fontWeight: '700', fontFamily: 'var(--font-mono)' }}>
-                  <span style={{ color: 'var(--primary)' }}>$</span>
+                  <span style={{ color: 'var(--primary)' }}>₹</span>
                   {report.costOfVisit}
                 </div>
               </div>

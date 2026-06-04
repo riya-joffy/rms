@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
+import { isAdminRole } from '../lib/roles';
 
 interface NavbarProps {
   activeTab: string;
@@ -50,6 +51,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, sidebarOpen, setSideb
         return '';
     }
   };
+
 
   if (!user) return null;
 

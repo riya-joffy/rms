@@ -8,8 +8,9 @@ export interface User {
   department: string;
   region?: string;
   avatar: string;
-  status: 'active' | 'suspended';
+  status: 'active' | 'disabled';
   lastActive: string;
+  emailVerified?: boolean;
 }
 
 export interface Organization {
@@ -46,7 +47,7 @@ export interface Organization {
 
 export interface MarketMetrics {
   footTraffic: 'Low' | 'Medium' | 'High';
-  salesVolume: number; // in USD
+  salesVolume: number; // in INR
   competitorPricingIndex: number; // 0-100 (comparison baseline)
   customerSatisfaction: number; // 1-5 stars
 }
@@ -166,3 +167,13 @@ export interface DashboardStats {
   monthlyGrowthRate: number;
   averageSatisfaction: number;
 }
+
+export interface MonthlyTargetItem {
+  id: string;
+  target: number;
+  month: string;
+  achievedPersons: number;
+  updatedAt: any;
+}
+
+

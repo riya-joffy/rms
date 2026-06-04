@@ -7,7 +7,9 @@ import {
   signInWithEmailAndPassword, 
   signOut as firebaseSignOut, 
   onAuthStateChanged,
-  User as FirebaseUser
+  User as FirebaseUser,
+  sendEmailVerification,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, query, setDoc, where, limit } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -58,8 +60,15 @@ export const authService = {
             return;
           }
 
-          if (user.status === 'suspended') {
-            reject(new Error('Your account is suspended. Please contact your system administrator.'));
+          if (user.status === 'disabled') {
+            reject(new Error('Your account has been disabled. Contact admin.'));
+            return;
+          }
+
+          if (user.emailVerified === false) {
+            const err = new Error('Your email address is not verified. Please verify your email to log in.');
+            (err as any).code = 'auth/email-not-verified';
+            reject(err);
             return;
           }
 
@@ -91,6 +100,13 @@ export const authService = {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const firebaseUser = userCredential.user;
 
+      if (!firebaseUser.emailVerified) {
+        await firebaseSignOut(auth);
+        const err = new Error('Your email address is not verified. Please verify your email to log in.');
+        (err as any).code = 'auth/email-not-verified';
+        throw err;
+      }
+
       // Fetch accompanying role and account details from Firestore 'users' collection
       const userDocRef = doc(db, 'users', firebaseUser.uid);
       let userDocSnap = await getDoc(userDocRef);
@@ -120,9 +136,9 @@ export const authService = {
       const resolvedEmail = (firebaseUser.email || userData.email || '').trim();
       const resolvedRole = resolveUserRole(userData.role, resolvedEmail);
 
-      if (userData.status === 'suspended') {
+      if (userData.status === 'disabled') {
         await firebaseSignOut(auth);
-        throw new Error('Your account is suspended. Please contact your system administrator.');
+        throw new Error('Your account has been disabled. Contact admin.');
       }
 
       const appUser: User = {
@@ -207,7 +223,7 @@ export const authService = {
       if (!isFirebaseConfigured()) {
         const users = dbService.getUsers();
         const dbUser = users.find(u => u.id === sessionUser.id);
-        if (!dbUser || dbUser.status === 'suspended') {
+        if (!dbUser || dbUser.status === 'disabled') {
           localStorage.removeItem(SESSION_KEY);
           return null;
         }
@@ -220,6 +236,63 @@ export const authService = {
       };
     } catch {
       return null;
+    }
+  },
+
+  resendVerificationEmail: async (email: string, password: string): Promise<void> => {
+    if (!isFirebaseConfigured()) {
+      console.log("[AuthService] Mock Mode: Simulated resending verification email.");
+      const users = dbService.getUsers();
+      const userIndex = users.findIndex(u => u.email.toLowerCase() === email.trim().toLowerCase());
+      if (userIndex !== -1) {
+        users[userIndex].emailVerified = true;
+        localStorage.setItem('rms_db_users', JSON.stringify(users));
+      }
+      return;
+    }
+    
+    // Live Firebase mode
+    try {
+      const tempCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      await sendEmailVerification(tempCredential.user);
+      await firebaseSignOut(auth);
+    } catch (error: any) {
+      console.error("[AuthService] Live resend verification email failure:", error);
+      throw new Error(error.message || 'Failed to resend verification email.');
+    }
+  },
+
+  sendPasswordReset: async (email: string): Promise<void> => {
+    if (!isFirebaseConfigured()) {
+      console.log("[AuthService] Mock Mode: Simulated password reset email to", email);
+      const users = dbService.getUsers();
+      const user = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+      if (!user) {
+        throw new Error('A user with this email address was not found.');
+      }
+      return;
+    }
+
+    // Live Firebase mode - Query Firestore to ensure user exists to bypass silent failure
+    try {
+      const usersByEmailQuery = query(
+        collection(db, 'users'),
+        where('email', '==', email.trim().toLowerCase()),
+        limit(1)
+      );
+      const usersByEmailSnapshot = await getDocs(usersByEmailQuery);
+      if (usersByEmailSnapshot.empty) {
+        throw new Error('A user with this email address was not found.');
+      }
+
+      await sendPasswordResetEmail(auth, email.trim());
+    } catch (error: any) {
+      console.error("[AuthService] Reset password failure:", error);
+      let errorMsg = error.message || 'Failed to send password reset email.';
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-email') {
+        errorMsg = 'A user with this email address was not found.';
+      }
+      throw new Error(errorMsg);
     }
   }
 };

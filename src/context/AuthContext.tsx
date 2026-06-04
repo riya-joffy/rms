@@ -13,9 +13,13 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
-  toggleUserStatus: (userId: string) => void;
+  toggleUserStatus: (userId: string) => Promise<void>;
   refreshUsers: () => void;
   addUser: (userData: Omit<User, 'id'>, password: string) => Promise<void>;
+  updateUser: (userId: string, updatedData: Partial<User>) => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
+  resendVerificationEmail: (email: string, password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -45,6 +49,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => unsubscribeUsers();
   }, []);
 
+  // Listen for status changes of the logged in user to force instant logout if disabled
+  useEffect(() => {
+    if (user) {
+      const liveUser = users.find((u) => u.id === user.id);
+      if (liveUser && liveUser.status === 'disabled') {
+        console.log("[AuthContext] Active session user was disabled, forcing logout.");
+        logout();
+      }
+    }
+  }, [users, user]);
+
   const login = async (email: string, password: string): Promise<User> => {
     setLoading(true);
     try {
@@ -73,22 +88,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const toggleUserStatus = (userId: string) => {
+  const toggleUserStatus = async (userId: string) => {
     if (!user || !isAdminRole(user.role)) return;
 
     const dbUsers = dbService.getUsers();
     const targetUser = dbUsers.find(u => u.id === userId);
     if (!targetUser) return;
 
-    const newStatus = targetUser.status === 'active' ? 'suspended' : 'active';
-    dbService.updateUserStatus(userId, newStatus, user.name);
+    const newStatus = targetUser.status === 'active' ? 'disabled' : 'active';
+    await dbService.updateUserStatus(userId, newStatus, user.name);
     if (!isFirebaseActive()) {
       setUsers(dbService.getUsers());
     }
     
-    // If the active user has their account suspended, force logout
-    if (user.id === userId && newStatus === 'suspended') {
-      logout();
+    // If the active user has their account disabled, force logout
+    if (user.id === userId && newStatus === 'disabled') {
+      await logout();
     }
   };
 
@@ -102,6 +117,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsers(dbService.getUsers());
   };
 
+  const updateUser = async (userId: string, updatedData: Partial<User>) => {
+    if (!user || !isAdminRole(user.role)) return;
+    await dbService.updateUser(userId, updatedData, user.name);
+    if (!isFirebaseActive()) {
+      setUsers(dbService.getUsers());
+    }
+  };
+
+  const deleteUser = async (userId: string) => {
+    if (!user || !isAdminRole(user.role)) return;
+    if (user.id === userId) {
+      throw new Error("You cannot delete your own admin account.");
+    }
+    await dbService.deleteUser(userId, user.name);
+    if (!isFirebaseActive()) {
+      setUsers(dbService.getUsers());
+    }
+  };
+
+  const sendPasswordReset = async (email: string) => {
+    await authService.sendPasswordReset(email);
+  };
+
+  const resendVerificationEmail = async (email: string, password: string) => {
+    await authService.resendVerificationEmail(email, password);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -112,7 +154,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         toggleUserStatus,
         refreshUsers,
-        addUser
+        addUser,
+        updateUser,
+        deleteUser,
+        sendPasswordReset,
+        resendVerificationEmail
       }}
     >
       {children}

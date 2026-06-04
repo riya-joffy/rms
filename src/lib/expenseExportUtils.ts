@@ -2,170 +2,32 @@
 
 import { MarketReport } from '../types';
 
-// XML helper to escape unsafe characters
-const escapeXml = (unsafe: any): string => {
-  if (unsafe === undefined || unsafe === null) return '';
-  const str = String(unsafe);
-  return str.replace(/[<>&'"]/g, (c) => {
-    switch (c) {
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '&': return '&amp;';
-      case '\'': return '&apos;';
-      case '"': return '&quot;';
-      default: return c;
-    }
-  });
-};
-
 const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
 
-// ==========================================
-// 1. XML EXPORT
-// ==========================================
-export const exportToXML = (
-  reports: MarketReport[],
-  staffNameById: Record<string, string>,
-  filters: { staff: string; month: string; fromDate?: string; toDate?: string },
-  totals: {
-    totalSpent: number;
-    averageCost: number;
-    staffWithExpenses: number;
-    topStaffSpender: { name: string; amount: number } | null;
-  }
-) => {
-  let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
-  xml += `<StaffExpenseAnalytics>\n`;
-  
-  // Metadata Section
-  xml += `  <Metadata>\n`;
-  xml += `    <GeneratedAt>${escapeXml(new Date().toISOString())}</GeneratedAt>\n`;
-  xml += `    <ActiveFilters>\n`;
-  xml += `      <StaffFilter>${escapeXml(filters.staff)}</StaffFilter>\n`;
-  xml += `      <MonthFilter>${escapeXml(filters.month)}</MonthFilter>\n`;
-  if (filters.fromDate) xml += `      <FromDate>${escapeXml(filters.fromDate)}</FromDate>\n`;
-  if (filters.toDate) xml += `      <ToDate>${escapeXml(filters.toDate)}</ToDate>\n`;
-  xml += `    </ActiveFilters>\n`;
-  xml += `  </Metadata>\n`;;
-
-  // Summary Metrics Section
-  xml += `  <SummaryMetrics>\n`;
-  xml += `    <TotalStaffSpending>${totals.totalSpent}</TotalStaffSpending>\n`;
-  xml += `    <TotalStaffSpendingFormatted>${escapeXml(formatCurrency(totals.totalSpent))}</TotalStaffSpendingFormatted>\n`;
-  xml += `    <AverageCostPerReport>${totals.averageCost}</AverageCostPerReport>\n`;
-  xml += `    <AverageCostPerReportFormatted>${escapeXml(formatCurrency(totals.averageCost))}</AverageCostPerReportFormatted>\n`;
-  xml += `    <StaffWithExpensesCount>${totals.staffWithExpenses}</StaffWithExpensesCount>\n`;
-  if (totals.topStaffSpender) {
-    xml += `    <TopSpender>\n`;
-    xml += `      <StaffName>${escapeXml(totals.topStaffSpender.name)}</StaffName>\n`;
-    xml += `      <Amount>${totals.topStaffSpender.amount}</Amount>\n`;
-    xml += `      <AmountFormatted>${escapeXml(formatCurrency(totals.topStaffSpender.amount))}</AmountFormatted>\n`;
-    xml += `    </TopSpender>\n`;
-  } else {
-    xml += `    <TopSpender>None</TopSpender>\n`;
-  }
-  xml += `  </SummaryMetrics>\n`;
-
-  // Detailed Expense Reports
-  xml += `  <StaffExpenseReports>\n`;
-  reports.forEach((report) => {
-    const staffName = staffNameById[report.staffId] || report.staffName;
-    const institutionHospital = report.institutionName || report.hospitalName || report.conferenceName || 'N/A';
-    
-    xml += `    <Report>\n`;
-    xml += `      <Id>${escapeXml(report.id)}</Id>\n`;
-    xml += `      <StaffId>${escapeXml(report.staffId)}</StaffId>\n`;
-    xml += `      <StaffName>${escapeXml(staffName)}</StaffName>\n`;
-    xml += `      <ActivityType>${escapeXml(report.activityType)}</ActivityType>\n`;
-    xml += `      <InstitutionHospital>${escapeXml(institutionHospital)}</InstitutionHospital>\n`;
-    xml += `      <Location>${escapeXml(report.location || '—')}</Location>\n`;
-    xml += `      <Date>${escapeXml(report.date)}</Date>\n`;
-    xml += `      <Time>${escapeXml(report.time)}</Time>\n`;
-    xml += `      <ApprovalStatus>${escapeXml(report.status)}</ApprovalStatus>\n`;
-    xml += `      <ExpenseBreakdown>\n`;
-    xml += `        <CostOfVisit>${report.costOfVisit ?? 0}</CostOfVisit>\n`;
-    xml += `        <CostOfVisitFormatted>${escapeXml(formatCurrency(report.costOfVisit ?? 0))}</CostOfVisitFormatted>\n`;
-    xml += `      </ExpenseBreakdown>\n`;
-    xml += `      <TotalCost>${report.costOfVisit ?? 0}</TotalCost>\n`;
-    xml += `      <MarketingObservation>${escapeXml(report.marketingObservation || '')}</MarketingObservation>\n`;
-    xml += `      <Observations>${escapeXml(report.observations || '')}</Observations>\n`;
-    xml += `    </Report>\n`;
-  });
-  xml += `  </StaffExpenseReports>\n`;
-  
-  xml += `</StaffExpenseAnalytics>\n`;
-
-  // Trigger Download
-  const blob = new Blob([xml], { type: 'application/xml;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', `staff-expenses-export_${new Date().toISOString().slice(0, 10)}.xml`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-};
-
-// ==========================================
-// 2. JPG SNAPSHOT EXPORT
-// ==========================================
-export const exportToJPG = async (
-  elementSelector: string,
-  fileName = 'expense-analytics-snapshot.jpg'
-) => {
-  const html2canvas = (await import('html2canvas')).default;
-  const element = document.querySelector(elementSelector);
-  if (!element) {
-    throw new Error(`Target element '${elementSelector}' not found`);
-  }
-
-  // Optimize rendering options for clean image
-  const canvas = await html2canvas(element as HTMLElement, {
-    useCORS: true,
-    scale: 2, // High DPI
-    backgroundColor: '#030712', // Match SaaS HSL(224, 71%, 4%) / HSL(224, 71%, 2%)
-    logging: false,
-    onclone: (clonedDoc) => {
-      // Clean up cloned element: remove filter selects or buttons if necessary
-      const clonedEl = clonedDoc.querySelector(elementSelector) as HTMLElement;
-      if (clonedEl) {
-        // Ensure fonts load nicely
-        clonedEl.style.fontFamily = "'Plus Jakarta Sans', sans-serif";
-      }
-    }
-  });
-
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-  const link = document.createElement('a');
-  link.download = fileName;
-  link.href = dataUrl;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
-
-// ==========================================
-// 3. PDF EXECUTIVE REPORT EXPORT
-// ==========================================
 export const exportToPDF = async (
   reports: MarketReport[],
   staffNameById: Record<string, string>,
-  filters: { staff: string; month: string; fromDate?: string; toDate?: string },
+  filters: {
+    staff: string;
+    month: string;
+    fromDate?: string;
+    toDate?: string;
+    searchTerm?: string;
+    category?: string;
+    hospital?: string;
+    status?: string;
+  },
   totals: {
     totalSpent: number;
     averageCost: number;
     staffWithExpenses: number;
     topStaffSpender: { name: string; amount: number } | null;
   },
-  chartsGridSelector: string
+  chartsGridSelector?: string
 ) => {
   const { jsPDF } = await import('jspdf');
-  const html2canvas = (await import('html2canvas')).default;
 
-  // Initialize jsPDF document (A4 page format)
-  // A4 size: 210mm x 297mm. Margins: 15mm. Printable width: 180mm.
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -177,371 +39,272 @@ export const exportToPDF = async (
   const margin = 15;
   const contentWidth = pageWidth - margin * 2; // 180mm
 
-  // Let's create a beautiful corporate dark-themed styled header & summaries
-  // ----------------------------------------------------
-  // Page 1: EXECUTIVE BRIEF & CHART SNAPSHOTS
-  // ----------------------------------------------------
-  
-  // Brand Header Panel (drawn with vectors for maximum crispness)
-  doc.setFillColor(3, 7, 18); // HSL(224, 71%, 4%) / HSL(224, 71%, 2%)
-  doc.rect(0, 0, pageWidth, pageHeight, 'F');
+  // Compute status totals
+  let totalCount = reports.length;
+  let totalAmount = reports.reduce((sum, r) => sum + (r.costOfVisit ?? 0), 0);
 
-  // Top header accents
-  doc.setFillColor(124, 58, 237); // Purple theme HSL(263, 90%, 65%)
-  doc.rect(margin, margin, 4, 12, 'F');
+  let approvedCount = 0;
+  let approvedAmount = 0;
+  let pendingCount = 0;
+  let pendingAmount = 0;
+  let rejectedCount = 0;
+  let rejectedAmount = 0;
 
-  // Title
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('Helvetica', 'bold');
-  doc.setFontSize(20);
-  doc.text('MARKETPULSE RMS', margin + 8, margin + 8.5);
-
-  doc.setFont('Helvetica', 'normal');
-  doc.setFontSize(10);
-  doc.setTextColor(156, 163, 175); // gray-400
-  doc.text('ENTERPRISE EXPENSE ANALYTICS & AUDIT REPORT', margin + 8, margin + 13.5);
-
-  // Metadata block (right aligned)
-  doc.setFontSize(8.5);
-  doc.text(`DATE GENERATED: ${new Date().toLocaleString()}`, pageWidth - margin, margin + 6, { align: 'right' });
-  doc.text(`STAFF SCOPE: ${filters.staff === 'All' ? 'All Staff Members' : staffNameById[filters.staff] || filters.staff}`, pageWidth - margin, margin + 10, { align: 'right' });
-  
-  // Render Date Range instead of Month Filter if From/To are active
-  const dateRangeStr = (filters.fromDate || filters.toDate)
-    ? `${filters.fromDate || 'Start'} to ${filters.toDate || 'Present'}`
-    : filters.month === 'All' ? 'All Operational Months' : filters.month;
-  doc.text(`DATE RANGE: ${dateRangeStr}`, pageWidth - margin, margin + 14, { align: 'right' });
-
-  // Divider Line
-  doc.setDrawColor(31, 41, 55); // border-muted HSL(217, 32%, 17%)
-  doc.setLineWidth(0.5);
-  doc.line(margin, margin + 18, pageWidth - margin, margin + 18);
-
-  // Executive Summary Card Panels
-  // We'll draw 4 cards side-by-side or in a 2x2 grid. Let's do a 2x2 grid for better sizing.
-  // Card layout:
-  // Card 1: Total Spending | Card 2: Average / Report
-  // Card 3: Staff with Expenses | Card 4: Peak Spender
-  const cardW = (contentWidth - 8) / 2; // 86mm each
-  const cardH = 26;
-  const row1Y = margin + 24;
-  const row2Y = row1Y + cardH + 8;
-
-  const drawCard = (x: number, y: number, title: string, value: string, footer: string, accentColor: [number, number, number]) => {
-    // Card Background
-    doc.setFillColor(15, 23, 42); // HSLA(224, 40%, 8%, 0.65)
-    doc.setDrawColor(31, 41, 55);
-    doc.rect(x, y, cardW, cardH, 'FD');
-
-    // Accent line at top
-    doc.setFillColor(accentColor[0], accentColor[1], accentColor[2]);
-    doc.rect(x, y, cardW, 2.5, 'F');
-
-    // Title
-    doc.setFont('Helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(156, 163, 175);
-    doc.text(title.toUpperCase(), x + 6, y + 8.5);
-
-    // Value
-    doc.setFontSize(15);
-    doc.setTextColor(255, 255, 255);
-    doc.text(value, x + 6, y + 16.5);
-
-    // Footer
-    doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(107, 114, 128); // gray-500
-    doc.text(footer, x + 6, y + 22.5);
-  };
-
-  // Draw the cards
-  drawCard(margin, row1Y, 'Total Staff Spending', formatCurrency(totals.totalSpent), `${reports.length} expense reports in scope`, [168, 85, 247]);
-  drawCard(margin + cardW + 8, row1Y, 'Average Expense / Report', formatCurrency(totals.averageCost), 'Mean visit cost in filters', [16, 185, 129]);
-  drawCard(margin, row2Y, 'Staff With Expenses', String(totals.staffWithExpenses), 'Registered field representatives', [14, 165, 233]);
-  
-  const peakSpenderName = totals.topStaffSpender ? totals.topStaffSpender.name.split(' ')[0] : '—';
-  const peakSpenderVal = totals.topStaffSpender ? formatCurrency(totals.topStaffSpender.amount) : 'No data';
-  drawCard(margin + cardW + 8, row2Y, 'Top Spender', peakSpenderName, `Total spent: ${peakSpenderVal}`, [245, 158, 11]);
-
-  // Section: Visual Analytics & Chart Trends
-  const chartsTitleY = row2Y + cardH + 12;
-  doc.setFont('Helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(255, 255, 255);
-  doc.text('VISUAL ANALYTICS & TRENDS', margin, chartsTitleY);
-
-  // Divider under section header
-  doc.setDrawColor(31, 41, 55);
-  doc.line(margin, chartsTitleY + 2, pageWidth - margin, chartsTitleY + 2);
-
-  // Capture Recharts charts to embed
-  const chartsEl = document.querySelector(chartsGridSelector);
-  if (chartsEl) {
-    try {
-      const canvas = await html2canvas(chartsEl as HTMLElement, {
-        useCORS: true,
-        scale: 2,
-        backgroundColor: '#030712',
-        logging: false,
-      });
-      const chartsImgData = canvas.toDataURL('image/jpeg', 0.90);
-      
-      // We want to fit the charts nicely in the remaining space of Page 1
-      // Remaining page height = 297 - chartsTitleY - margin - 6
-      const targetY = chartsTitleY + 6;
-      const targetH = pageHeight - targetY - margin;
-      
-      // Calculate aspect ratio of captured canvas
-      const canvasW = canvas.width;
-      const canvasH = canvas.height;
-      const aspect = canvasH / canvasW;
-
-      // Draw image fitting contentWidth
-      const imgH = contentWidth * aspect;
-      const renderH = Math.min(imgH, targetH);
-      const renderW = renderH / aspect;
-      const renderX = margin + (contentWidth - renderH / aspect) / 2;
-
-      doc.addImage(chartsImgData, 'JPEG', renderX, targetY, renderW, renderH);
-    } catch (e) {
-      console.error('Error capturing charts for PDF:', e);
-      doc.setFont('Helvetica', 'italic');
-      doc.setFontSize(9);
-      doc.setTextColor(156, 163, 175);
-      doc.text('[Charts omitted due to render capture constraint]', margin, chartsTitleY + 12);
+  reports.forEach((r) => {
+    const cost = r.costOfVisit ?? 0;
+    if (r.status === 'Approved') {
+      approvedCount++;
+      approvedAmount += cost;
+    } else if (r.status === 'Pending') {
+      pendingCount++;
+      pendingAmount += cost;
+    } else if (r.status === 'Rejected') {
+      rejectedCount++;
+      rejectedAmount += cost;
     }
-  } else {
-    doc.setFont('Helvetica', 'italic');
-    doc.setFontSize(9);
-    doc.setTextColor(156, 163, 175);
-    doc.text('[No visual charts found to capture]', margin, chartsTitleY + 12);
-  }
-
-  // Footer for page 1
-  doc.setFont('Helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(107, 114, 128);
-  doc.text('MarketPulse RMS • Confidential Operational Ledger', margin, pageHeight - 8);
-  doc.text('Page 1 of 2', pageWidth - margin, pageHeight - 8, { align: 'right' });
-
-  // ----------------------------------------------------
-  // Page 2: DETAILED STAFF EXPENSE TABLE
-  // ----------------------------------------------------
-  doc.addPage();
-  
-  // Page 2 dark background
-  doc.setFillColor(3, 7, 18);
-  doc.rect(0, 0, pageWidth, pageHeight, 'F');
-
-  // Top header for page 2
-  doc.setFillColor(124, 58, 237);
-  doc.rect(margin, margin, 4, 10, 'F');
-  
-  doc.setFont('Helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(255, 255, 255);
-  doc.text('STAFF EXPENSE LEDGER', margin + 8, margin + 7.5);
-
-  doc.setFont('Helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(156, 163, 175);
-  doc.text(`TOTAL AUDITED REPORTS: ${reports.length}`, pageWidth - margin, margin + 7.5, { align: 'right' });
-
-  // Divider
-  doc.setDrawColor(31, 41, 55);
-  doc.line(margin, margin + 14, pageWidth - margin, margin + 14);
-
-  // Draw detailed data table
-  // Columns: ID (18), Staff (34), Activity (40), Location/Hosp (38), Date (20), Cost (16), Status (14) = 180 total
-  const cols = [
-    { name: 'ID', w: 18 },
-    { name: 'Staff Name', w: 32 },
-    { name: 'Activity Type', w: 36 },
-    { name: 'Location / Hospital', w: 38 },
-    { name: 'Date', w: 22 },
-    { name: 'Cost', w: 18 },
-    { name: 'Status', w: 16 }
-  ];
-
-  let currentY = margin + 22;
-  const rowHeight = 8;
-  const headerHeight = 9;
-
-  // Draw Table Headers
-  doc.setFillColor(15, 23, 42); // Header background
-  doc.rect(margin, currentY, contentWidth, headerHeight, 'F');
-
-  doc.setFont('Helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(156, 163, 175);
-
-  let headerX = margin;
-  cols.forEach((col) => {
-    // align Cost to the right
-    const isCost = col.name === 'Cost';
-    const alignX = isCost ? headerX + col.w - 2 : headerX + 2;
-    doc.text(col.name, alignX, currentY + 6, { align: isCost ? 'right' : 'left' });
-    headerX += col.w;
   });
 
-  currentY += headerHeight;
+  // Page 1 Header & Layout Setup
+  const drawPageHeader = (pageNumber: number) => {
+    if (pageNumber === 1) {
+      // Branding Accent Line
+      doc.setFillColor(79, 70, 229); // Indigo-600
+      doc.rect(margin, margin, 5, 12, 'F');
 
-  // Draw Rows
-  doc.setFont('Helvetica', 'normal');
-  doc.setFontSize(8);
+      // Title
+      doc.setFont('Helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(17, 24, 39); // Gray-900
+      doc.text('MRMW Expense Report', margin + 8, margin + 8);
 
-  reports.forEach((report, index) => {
-    // Check page boundaries (reserve space for page footer)
-    if (currentY + rowHeight > pageHeight - margin - 10) {
-      // Add Page Footer to old page before switching
+      // Generated Date Info
       doc.setFont('Helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(107, 114, 128);
-      doc.text('MarketPulse RMS • Confidential Operational Ledger', margin, pageHeight - 8);
-      doc.text(`Page 2`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+      doc.setFontSize(9);
+      doc.setTextColor(107, 114, 128); // Gray-500
+      doc.text(`Generated: ${new Date().toLocaleString()}`, pageWidth - margin, margin + 7, { align: 'right' });
 
-      doc.addPage();
-      
-      // Page background
-      doc.setFillColor(3, 7, 18);
-      doc.rect(0, 0, pageWidth, pageHeight, 'F');
-
-      // Table title continuing
-      doc.setFillColor(124, 58, 237);
-      doc.rect(margin, margin, 4, 8, 'F');
-      doc.setFont('Helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(255, 255, 255);
-      doc.text('STAFF EXPENSE LEDGER (CONTINUED)', margin + 8, margin + 6);
-      
       // Divider
-      doc.setDrawColor(31, 41, 55);
-      doc.line(margin, margin + 11, pageWidth - margin, margin + 11);
+      doc.setDrawColor(229, 231, 235); // Gray-200
+      doc.setLineWidth(0.5);
+      doc.line(margin, margin + 16, pageWidth - margin, margin + 16);
 
-      currentY = margin + 16;
+      // Summary Cards Section
+      const cardY = margin + 20;
+      const cardW = (contentWidth - 9) / 4; // ~42.75mm each
+      const cardH = 18;
 
-      // Draw Table Headers again
-      doc.setFillColor(15, 23, 42);
-      doc.rect(margin, currentY, contentWidth, headerHeight, 'F');
-      
-      doc.setFont('Helvetica', 'bold');
-      doc.setFontSize(8.5);
-      doc.setTextColor(156, 163, 175);
-      
-      let nextHeaderX = margin;
-      cols.forEach((col) => {
-        const isCost = col.name === 'Cost';
-        const alignX = isCost ? nextHeaderX + col.w - 2 : nextHeaderX + 2;
-        doc.text(col.name, alignX, currentY + 6, { align: isCost ? 'right' : 'left' });
-        nextHeaderX += col.w;
+      const drawCard = (x: number, title: string, count: number, amount: number, colors: { bg: [number, number, number], border: [number, number, number], text: [number, number, number] }) => {
+        doc.setFillColor(colors.bg[0], colors.bg[1], colors.bg[2]);
+        doc.setDrawColor(colors.border[0], colors.border[1], colors.border[2]);
+        doc.rect(x, cardY, cardW, cardH, 'FD');
+
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        doc.text(title.toUpperCase(), x + 4, cardY + 5.5);
+
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.text(formatCurrency(amount), x + 4, cardY + 11.5);
+
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(107, 114, 128);
+        doc.text(`${count} record${count !== 1 ? 's' : ''}`, x + 4, cardY + 15.5);
+      };
+
+      // Card 1: Total
+      drawCard(margin, 'Total Expenses', totalCount, totalAmount, {
+        bg: [243, 244, 246], // Slate 100
+        border: [209, 213, 219], // Slate 300
+        text: [31, 41, 55] // Slate 800
       });
 
-      currentY += headerHeight;
-      doc.setFont('Helvetica', 'normal');
-      doc.setFontSize(8);
+      // Card 2: Approved
+      drawCard(margin + cardW + 3, 'Approved', approvedCount, approvedAmount, {
+        bg: [240, 253, 244], // Green 50
+        border: [187, 247, 208], // Green 200
+        text: [22, 101, 52] // Green 800
+      });
+
+      // Card 3: Pending
+      drawCard(margin + (cardW + 3) * 2, 'Pending', pendingCount, pendingAmount, {
+        bg: [254, 252, 232], // Yellow 50
+        border: [254, 240, 138], // Yellow 200
+        text: [133, 77, 14] // Yellow 800
+      });
+
+      // Card 4: Rejected
+      drawCard(margin + (cardW + 3) * 3, 'Rejected', rejectedCount, rejectedAmount, {
+        bg: [254, 242, 242], // Red 50
+        border: [254, 202, 202], // Red 200
+        text: [153, 27, 27] // Red 800
+      });
+    }
+  };
+
+  // Setup Table Header Drawing Function
+  const drawTableHeader = (y: number) => {
+    doc.setFillColor(31, 41, 55); // Gray-800
+    doc.rect(margin, y, contentWidth, 8, 'F');
+
+    doc.setFont('Helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+
+    let headerX = margin;
+    cols.forEach((col) => {
+      const alignText = col.name === 'Amount' ? 'right' : 'left';
+      const textX = col.name === 'Amount' ? headerX + col.w - 2 : headerX + 2;
+      doc.text(col.name, textX, y + 5.5, { align: alignText });
+      headerX += col.w;
+    });
+  };
+
+  // Define Columns configuration (Widths sum to exact contentWidth = 180mm)
+  const cols = [
+    { name: 'Expense Title', w: 45 },
+    { name: 'Amount', w: 20 },
+    { name: 'Category', w: 24 },
+    { name: 'Organisation/Hospital', w: 30 },
+    { name: 'Submitted By', w: 27 },
+    { name: 'Status', w: 17 },
+    { name: 'Created Date', w: 17 }
+  ];
+
+  const rowHeight = 7.5;
+  let currentY = margin + 43; // Table starts at 58mm on Page 1
+  let pageNumber = 1;
+
+  drawPageHeader(1);
+  drawTableHeader(currentY);
+  currentY += 8;
+
+  reports.forEach((report, index) => {
+    // Page overflow safety checks
+    if (currentY + rowHeight > pageHeight - margin - 15) {
+      doc.addPage();
+      pageNumber++;
+      currentY = margin + 10;
+      drawPageHeader(pageNumber);
+      drawTableHeader(currentY);
+      currentY += 8;
     }
 
-    // Alternating rows bg color
+    // Alternating rows background color
     const isEven = index % 2 === 0;
-    const r = isEven ? 9 : 15;
-    const g = isEven ? 13 : 23;
-    const b = isEven ? 26 : 42;
-    doc.setFillColor(r, g, b);
+    doc.setFillColor(isEven ? 255 : 249, isEven ? 255 : 250, isEven ? 255 : 251); // Alternate with Gray 50
     doc.rect(margin, currentY, contentWidth, rowHeight, 'F');
 
-    // Bottom border for row
-    doc.setDrawColor(31, 41, 55);
-    doc.setLineWidth(0.2);
+    // Horizontal bottom grid line
+    doc.setDrawColor(243, 244, 246); // Gray-100
+    doc.setLineWidth(0.25);
     doc.line(margin, currentY + rowHeight, pageWidth - margin, currentY + rowHeight);
 
-    // Write row cell values
     const staffName = staffNameById[report.staffId] || report.staffName;
     const institutionHospital = report.institutionName || report.hospitalName || report.conferenceName || 'N/A';
-    
-    // Truncate text to avoid cell overflowing
+    const expenseTitle = `${report.activityType} - ${institutionHospital}`;
+
+    // Text Truncation helper to prevent cell overflow
     const truncate = (text: string, maxLen: number) => {
       if (text.length > maxLen) return text.slice(0, maxLen - 2) + '…';
       return text;
     };
 
     let cellX = margin;
-    
-    // REP ID
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('Courier', 'bold');
-    doc.setFontSize(7.5);
-    doc.text(report.id.replace('REP-', ''), cellX + 2, currentY + 5);
-    cellX += cols[0].w;
-    
-    // STAFF NAME
+
+    // Col 1: Expense Title
     doc.setFont('Helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(229, 231, 235);
-    doc.text(truncate(staffName, 17), cellX + 2, currentY + 5);
+    doc.setFontSize(7.5);
+    doc.setTextColor(31, 41, 55);
+    doc.text(truncate(expenseTitle, 28), cellX + 2, currentY + 4.8);
+    cellX += cols[0].w;
+
+    // Col 2: Amount
+    doc.setFont('Helvetica', 'bold');
+    doc.setTextColor(79, 70, 229); // Indigo
+    const amountVal = report.costOfVisit !== undefined ? formatCurrency(report.costOfVisit) : '₹0';
+    doc.text(amountVal, cellX + cols[1].w - 2, currentY + 4.8, { align: 'right' });
     cellX += cols[1].w;
 
-    // ACTIVITY TYPE
-    doc.text(truncate(report.activityType, 20), cellX + 2, currentY + 5);
+    // Col 3: Category
+    doc.setFont('Helvetica', 'normal');
+    doc.setTextColor(75, 85, 99);
+    doc.text(truncate(report.activityType, 16), cellX + 2, currentY + 4.8);
     cellX += cols[2].w;
 
-    // LOCATION/HOSPITAL
-    doc.text(truncate(institutionHospital, 20), cellX + 2, currentY + 5);
+    // Col 4: Organisation/Hospital
+    doc.text(truncate(institutionHospital, 20), cellX + 2, currentY + 4.8);
     cellX += cols[3].w;
 
-    // DATE
-    doc.text(report.date, cellX + 2, currentY + 5);
+    // Col 5: Submitted By
+    doc.text(truncate(staffName, 17), cellX + 2, currentY + 4.8);
     cellX += cols[4].w;
 
-    // COST (align right)
-    const costText = report.costOfVisit !== undefined ? formatCurrency(report.costOfVisit) : '—';
+    // Col 6: Status
+    const statusVal = report.status;
+    let statusTextColor = [107, 114, 128]; // Default Gray
+    if (statusVal === 'Approved') statusTextColor = [22, 101, 52];
+    else if (statusVal === 'Pending') statusTextColor = [180, 83, 9];
+    else if (statusVal === 'Rejected') statusTextColor = [153, 27, 27];
+
     doc.setFont('Helvetica', 'bold');
-    doc.setTextColor(168, 85, 247); // purple
-    doc.text(costText, cellX + cols[5].w - 2, currentY + 5, { align: 'right' });
+    doc.setTextColor(statusTextColor[0], statusTextColor[1], statusTextColor[2]);
+    doc.text(statusVal, cellX + 2, currentY + 4.8);
     cellX += cols[5].w;
 
-    // STATUS badge color coding
-    const statusVal = report.status;
-    let statusColor: [number, number, number] = [156, 163, 175]; // default gray
-    if (statusVal === 'Approved') {
-      statusColor = [16, 185, 129]; // green
-    } else if (statusVal === 'Rejected') {
-      statusColor = [239, 68, 68]; // red
-    } else if (statusVal === 'Pending') {
-      statusColor = [245, 158, 11]; // orange
-    }
-
-    doc.setFillColor(statusColor[0] / 5, statusColor[1] / 5, statusColor[2] / 5); // very dark glow background
-    doc.rect(cellX + 1, currentY + 2, cols[6].w - 2, 4, 'F');
-
-    doc.setFontSize(6.5);
-    doc.setFont('Helvetica', 'bold');
-    doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
-    doc.text(statusVal.toUpperCase(), cellX + cols[6].w / 2, currentY + 4.8, { align: 'center' });
+    // Col 7: Created Date
+    doc.setFont('Helvetica', 'normal');
+    doc.setTextColor(107, 114, 128);
+    doc.text(report.date, cellX + 2, currentY + 4.8);
 
     currentY += rowHeight;
   });
 
-  // Draw Ledger Total Footer Row
-  const totalReportsCost = reports.reduce((sum, r) => sum + (r.costOfVisit ?? 0), 0);
-  doc.setFillColor(15, 23, 42);
-  doc.rect(margin, currentY, contentWidth, rowHeight + 2, 'F');
+  // Totals Row at the bottom of the table
+  if (currentY + rowHeight > pageHeight - margin - 15) {
+    doc.addPage();
+    pageNumber++;
+    currentY = margin + 10;
+    drawPageHeader(pageNumber);
+    drawTableHeader(currentY);
+    currentY += 8;
+  }
+
+  // Draw Bottom Totals Box
+  doc.setFillColor(243, 244, 246); // Gray-100
+  doc.rect(margin, currentY, contentWidth, rowHeight + 1, 'F');
+  
+  doc.setDrawColor(209, 213, 219); // Gray-300
+  doc.setLineWidth(0.5);
+  doc.line(margin, currentY, pageWidth - margin, currentY);
+  doc.line(margin, currentY + rowHeight + 1, pageWidth - margin, currentY + rowHeight + 1);
+
   doc.setFont('Helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.setTextColor(255, 255, 255);
-  doc.text(`TOTAL EXPENSES SCOPE (${reports.length} REPORTS)`, margin + 2, currentY + 6.5);
-  
-  doc.setTextColor(168, 85, 247); // purple
-  doc.setFontSize(9.5);
-  doc.text(formatCurrency(totalReportsCost), pageWidth - margin - 2, currentY + 6.5, { align: 'right' });
+  doc.setTextColor(17, 24, 39);
+  doc.text('TOTAL CUMULATIVE EXPENSES', margin + 2, currentY + 5.5);
 
-  // Final Footer for page 2
-  doc.setFont('Helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.setTextColor(107, 114, 128);
-  doc.text('MarketPulse RMS • Confidential Operational Ledger', margin, pageHeight - 8);
-  doc.text(`Page 2`, pageWidth - margin, pageHeight - 8, { align: 'right' });
+  doc.setTextColor(79, 70, 229);
+  doc.text(formatCurrency(totalAmount), margin + cols[0].w + cols[1].w - 2, currentY + 5.5, { align: 'right' });
 
-  // Trigger download of PDF
-  doc.save(`staff-expenses-report_${new Date().toISOString().slice(0, 10)}.pdf`);
+  // Two-pass execution for page footer numbers
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    
+    // Page bottom accent line
+    doc.setDrawColor(243, 244, 246);
+    doc.setLineWidth(0.5);
+    doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
+
+    doc.setFont('Helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(156, 163, 175);
+    
+    doc.text('MRMW Expense Report • System Ledger Export', margin, pageHeight - 9);
+    doc.text(`Page ${i} of ${totalPages}`, pageWidth - margin, pageHeight - 9, { align: 'right' });
+  }
+
+  doc.save(`mrmw-expenses-report_${new Date().toISOString().slice(0, 10)}.pdf`);
 };

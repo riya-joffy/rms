@@ -9,11 +9,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
   AreaChart,
   Area,
 } from 'recharts';
@@ -24,9 +19,9 @@ interface AdminAnalyticsProps {
 }
 
 const formatCurrency = (val: number) => {
-  return new Intl.NumberFormat('en-US', {
+  return new Intl.NumberFormat('en-IN', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'INR',
     maximumFractionDigits: 0,
   }).format(val);
 };
@@ -87,12 +82,45 @@ const CustomTooltip = ({ active, payload, label, formatter }: any) => {
       </div>
     );
   }
-  return null;
 };
 
 export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({ reports }) => {
   const [isMounted, setIsMounted] = useState(false);
-  const [rankingMetric, setRankingMetric] = useState<'reports' | 'approved' | 'expenses'>('reports');
+
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  const minSwipeDistance = 50;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = (numSlides: number) => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    if (isLeftSwipe) {
+      setCurrentSlide(prev => (prev === numSlides - 1 ? 0 : prev + 1));
+    } else if (isRightSwipe) {
+      setCurrentSlide(prev => (prev === 0 ? numSlides - 1 : prev - 1));
+    }
+  };
+
+  const prevSlide = () => {
+    setCurrentSlide(prev => (prev === 0 ? 1 : 0));
+  };
+
+  const nextSlide = () => {
+    setCurrentSlide(prev => (prev === 1 ? 0 : 1));
+  };
 
   useEffect(() => {
     setIsMounted(true);
@@ -121,89 +149,7 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({ reports }) => {
     });
   }, [reports]);
 
-  // 2. Expense Analysis (Compare total expenses by category)
-  const expenseAnalysisData = useMemo(() => {
-    let institutionExpenses = 0;
-    let hospitalExpenses = 0;
-    let campaignExpenses = 0;
-    let conferenceExpenses = 0;
-
-    reports.forEach((r) => {
-      const cost = r.costOfVisit ?? 0;
-      if (r.activityType === 'Meeting with Organisation') {
-        if (r.meetingType === 'Hospital') {
-          hospitalExpenses += cost;
-        } else {
-          institutionExpenses += cost;
-        }
-      } else if (r.activityType === 'Campaigns Conducted') {
-        campaignExpenses += cost;
-      } else if (r.activityType === 'Participation in Conferences') {
-        conferenceExpenses += cost;
-      }
-    });
-
-    return [
-      { name: 'Institution Mtgs', amount: institutionExpenses, fill: 'var(--primary)' },
-      { name: 'Hospital Mtgs', amount: hospitalExpenses, fill: 'var(--info)' },
-      { name: 'Campaigns', amount: campaignExpenses, fill: 'var(--success)' },
-      { name: 'Conferences', amount: conferenceExpenses, fill: 'var(--warning)' },
-    ];
-  }, [reports]);
-
-  // 3. Report Status Distribution
-  const statusDistributionData = useMemo(() => {
-    let pending = 0;
-    let approved = 0;
-    let rejected = 0;
-
-    reports.forEach((r) => {
-      if (r.status === 'Pending') pending++;
-      else if (r.status === 'Approved') approved++;
-      else if (r.status === 'Rejected') rejected++;
-    });
-
-    return [
-      { name: 'Pending', value: pending, fill: 'var(--warning)' },
-      { name: 'Approved', value: approved, fill: 'var(--success)' },
-      { name: 'Rejected', value: rejected, fill: 'var(--error)' },
-    ];
-  }, [reports]);
-
-  // 4. Staff Performance Ranking
-  const staffRankingData = useMemo(() => {
-    const staffStats: Record<
-      string,
-      { name: string; reports: number; approved: number; expenses: number }
-    > = {};
-
-    reports.forEach((r) => {
-      const staffId = r.staffId;
-      const staffName = r.staffName || 'Unknown Staff';
-      if (!staffStats[staffId]) {
-        staffStats[staffId] = {
-          name: staffName,
-          reports: 0,
-          approved: 0,
-          expenses: 0,
-        };
-      }
-      staffStats[staffId].reports += 1;
-      if (r.status === 'Approved') {
-        staffStats[staffId].approved += 1;
-      }
-      staffStats[staffId].expenses += r.costOfVisit ?? 0;
-    });
-
-    // Convert to array and sort descending by selected metric
-    const arr = Object.values(staffStats);
-    arr.sort((a, b) => b[rankingMetric] - a[rankingMetric]);
-    
-    // Take top 5
-    return arr.slice(0, 5);
-  }, [reports, rankingMetric]);
-
-  // 5. Monthly Expense Trend
+  // 2. Monthly Expense Trend
   const monthlyExpenseTrendData = useMemo(() => {
     const expenseByMonth: Record<string, number> = {};
     reports.forEach((r) => {
@@ -225,31 +171,6 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({ reports }) => {
         amount: expenseByMonth[key],
       };
     });
-  }, [reports]);
-
-  // 6. Activity Type Distribution
-  const activityDistributionData = useMemo(() => {
-    let meetingsCount = 0;
-    let campaignsCount = 0;
-    let conferencesCount = 0;
-
-    reports.forEach((r) => {
-      if (r.activityType === 'Meeting with Organisation') {
-        meetingsCount += 1;
-      } else if (r.activityType === 'Campaigns Conducted') {
-        campaignsCount += 1;
-      } else if (r.activityType === 'Participation in Conferences') {
-        conferencesCount += 1;
-      }
-    });
-
-    const total = meetingsCount + campaignsCount + conferencesCount || 1;
-
-    return [
-      { name: 'Meetings', value: meetingsCount, percentage: Math.round((meetingsCount / total) * 100), fill: 'var(--primary)' },
-      { name: 'Campaigns', value: campaignsCount, percentage: Math.round((campaignsCount / total) * 100), fill: 'var(--success)' },
-      { name: 'Conferences', value: conferencesCount, percentage: Math.round((conferencesCount / total) * 100), fill: 'var(--warning)' },
-    ].filter(item => item.value > 0);
   }, [reports]);
 
   if (!isMounted) {
@@ -275,300 +196,213 @@ export const AdminAnalytics: React.FC<AdminAnalyticsProps> = ({ reports }) => {
         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '4px' }}>Dynamic real-time statistical visualization of marketing audits, operations, and budgets.</p>
       </div>
 
-      <div className="analytics-charts-grid">
-        
-        {/* CHART 1: Reports Activity Trend */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">
-              <h3>Reports Activity Trend</h3>
-              <p>Total submissions tracked over time</p>
-            </div>
-          </div>
-          <div style={{ width: '100%', height: 240, marginTop: '8px' }}>
-            {activityTrendData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={activityTrendData} margin={{ top: 8, right: 16, left: -24, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} />
-                  <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line
-                    type="monotone"
-                    dataKey="count"
-                    name="Reports Filed"
-                    stroke="var(--primary)"
-                    strokeWidth={3}
-                    activeDot={{ r: 6, stroke: 'var(--bg-main)', strokeWidth: 2 }}
-                    dot={{ r: 3, fill: 'var(--bg-main)', stroke: 'var(--primary)', strokeWidth: 2 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                No activity data available
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* CHART 2: Expense Analysis */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">
-              <h3>Expense Analysis</h3>
-              <p>Compare total expenses accrued across categories</p>
-            </div>
-          </div>
-          <div style={{ width: '100%', height: 240, marginTop: '8px' }}>
-            {expenseAnalysisData.some(d => d.amount > 0) ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={expenseAnalysisData} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} />
-                  <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip content={<CustomTooltip formatter={formatCurrency} />} />
-                  <Bar dataKey="amount" name="Total Expense" radius={[4, 4, 0, 0]}>
-                    {expenseAnalysisData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                No expense data recorded yet
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* CHART 3: Report Status Distribution */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">
-              <h3>Report Status Distribution</h3>
-              <p>Breakdown of audited vs pending reports</p>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 240, paddingRight: '20px' }}>
-            {reports.length > 0 ? (
-              <>
-                <div style={{ width: '60%', height: '100%', position: 'relative' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={statusDistributionData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={65}
-                        outerRadius={85}
-                        paddingAngle={5}
-                        dataKey="value"
-                      >
-                        {statusDistributionData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <text x="50%" y="47%" textAnchor="middle" dominantBaseline="middle" fill="var(--text-main)" style={{ fontSize: '1.4rem', fontWeight: 800, fontFamily: 'var(--font-mono)' }}>
-                        {reports.filter(r => r.status !== 'Draft').length}
-                      </text>
-                      <text x="50%" y="59%" textAnchor="middle" dominantBaseline="middle" fill="var(--text-muted)" style={{ fontSize: '0.7rem', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                        Audited
-                      </text>
-                      <Tooltip content={<CustomTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
+      <div 
+        className="analytics-charts-grid" 
+        style={{ 
+          display: 'block', 
+          position: 'relative', 
+          overflow: 'hidden', 
+          padding: '0 48px'
+        }}
+      >
+        <div 
+          style={{ 
+            overflow: 'hidden',
+            width: '100%',
+            position: 'relative'
+          }}
+        >
+          <div 
+            style={{ 
+              display: 'flex', 
+              transform: `translateX(-${currentSlide * 100}%)`, 
+              transition: 'transform 0.45s cubic-bezier(0.16, 1, 0.3, 1)',
+              width: '100%'
+            }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={() => handleTouchEnd(2)}
+          >
+            {/* Slide 1: Reports Activity Trend */}
+            <div style={{ width: '100%', flexShrink: 0, padding: '0 8px', boxSizing: 'border-box' }}>
+              <div className="chart-card" style={{ height: '100%' }}>
+                <div className="chart-card-header">
+                  <div className="chart-card-title">
+                    <h3>Reports Activity Trend</h3>
+                    <p>Total submissions tracked over time</p>
+                  </div>
                 </div>
-                
-                {/* Custom Status Legend */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '35%' }}>
-                  {statusDistributionData.map((status, index) => {
-                    const totalAudited = reports.filter(r => r.status !== 'Draft').length || 1;
-                    const pct = Math.round((status.value / totalAudited) * 100);
-                    return (
-                      <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: status.fill }} />
-                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>{status.name}</span>
-                        </div>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '14px', fontFamily: 'var(--font-mono)' }}>
-                          {status.value} ({pct}%)
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                No status distribution data available
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* CHART 4: Staff Performance Ranking */}
-        <div className="chart-card">
-          <div className="chart-card-header" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-            <div className="chart-card-title">
-              <h3>Staff Performance Ranking</h3>
-              <p>Top staff ranked by dynamic activity metrics</p>
-            </div>
-            
-            {/* Metric Pills */}
-            <div style={{ display: 'flex', gap: '4px', backgroundColor: 'var(--bg-sidebar)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-muted)' }}>
-              {(['reports', 'approved', 'expenses'] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setRankingMetric(m)}
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    borderRadius: 'var(--radius-sm)',
-                    border: 'none',
-                    backgroundColor: rankingMetric === m ? 'var(--primary)' : 'transparent',
-                    color: rankingMetric === m ? 'var(--text-main)' : 'var(--text-muted)',
-                    transition: 'all 0.20s ease',
-                  }}
-                >
-                  {m === 'reports' ? 'Filed' : m === 'approved' ? 'Approved' : 'Expenses'}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div style={{ width: '100%', height: 240, marginTop: '8px' }}>
-            {staffRankingData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={staffRankingData}
-                  layout="vertical"
-                  margin={{ top: 8, right: 16, left: 16, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} />
-                  <YAxis dataKey="name" type="category" tick={{ fill: 'var(--text-main)', fontSize: 10, fontWeight: 600 }} tickLine={false} width={80} />
-                  <Tooltip content={<CustomTooltip formatter={(v: number) => rankingMetric === 'expenses' ? formatCurrency(v) : v} />} />
-                  <Bar
-                    dataKey={rankingMetric}
-                    name={rankingMetric === 'reports' ? 'Reports Filed' : rankingMetric === 'approved' ? 'Approved Reports' : 'Expenses ($)'}
-                    fill="var(--primary)"
-                    radius={[0, 4, 4, 0]}
-                    barSize={16}
-                  >
-                    {staffRankingData.map((entry, index) => {
-                      const colors = ['#a855f7', '#a855f7', '#a855f7', '#a855f7', '#a855f7']; // Single primary tone with decreasing brightness if needed, or constant
-                      return <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />;
-                    })}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                No performance data available
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* CHART 5: Monthly Expense Trend */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">
-              <h3>Monthly Expense Trend</h3>
-              <p>Timeline of total money spent per month</p>
-            </div>
-          </div>
-          <div style={{ width: '100%', height: 240, marginTop: '8px' }}>
-            {monthlyExpenseTrendData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthlyExpenseTrendData} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="expenseTrendGlow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" vertical={false} />
-                  <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} />
-                  <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
-                  <Tooltip content={<CustomTooltip formatter={formatCurrency} />} />
-                  <Area
-                    type="monotone"
-                    dataKey="amount"
-                    name="Spent Amount"
-                    stroke="var(--primary)"
-                    strokeWidth={3}
-                    fillOpacity={1}
-                    fill="url(#expenseTrendGlow)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                No monthly expense trends available
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* CHART 6: Activity Type Distribution */}
-        <div className="chart-card">
-          <div className="chart-card-header">
-            <div className="chart-card-title">
-              <h3>Activity Type Distribution</h3>
-              <p>Proportion of different activities conducted</p>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 240, paddingRight: '20px' }}>
-            {activityDistributionData.length > 0 ? (
-              <>
-                <div style={{ width: '60%', height: '100%' }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={activityDistributionData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={0}
-                        outerRadius={85}
-                        dataKey="value"
-                        labelLine={false}
-                      >
-                        {activityDistributionData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<CustomTooltip formatter={(v: number) => `${v} reports`} />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-
-                {/* Custom Activity Legend */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '35%' }}>
-                  {activityDistributionData.map((activity, index) => (
-                    <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: activity.fill }} />
-                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>{activity.name}</span>
-                      </div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '14px', fontFamily: 'var(--font-mono)' }}>
-                        {activity.value} reports ({activity.percentage}%)
-                      </span>
+                <div style={{ width: '100%', height: 240, marginTop: '8px' }}>
+                  {activityTrendData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={activityTrendData} margin={{ top: 8, right: 16, left: -24, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" vertical={false} />
+                        <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} />
+                        <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Line
+                          type="monotone"
+                          dataKey="count"
+                          name="Reports Filed"
+                          stroke="var(--primary)"
+                          strokeWidth={3}
+                          activeDot={{ r: 6, stroke: 'var(--bg-main)', strokeWidth: 2 }}
+                          dot={{ r: 3, fill: 'var(--bg-main)', stroke: 'var(--primary)', strokeWidth: 2 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                      No activity data available
                     </div>
-                  ))}
+                  )}
                 </div>
-              </>
-            ) : (
-              <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
-                No activity type data available
               </div>
-            )}
+            </div>
+
+            {/* Slide 2: Monthly Expense Trend */}
+            <div style={{ width: '100%', flexShrink: 0, padding: '0 8px', boxSizing: 'border-box' }}>
+              <div className="chart-card" style={{ height: '100%' }}>
+                <div className="chart-card-header">
+                  <div className="chart-card-title">
+                    <h3>Monthly Expense Trend</h3>
+                    <p>Timeline of total money spent per month</p>
+                  </div>
+                </div>
+                <div style={{ width: '100%', height: 240, marginTop: '8px' }}>
+                  {monthlyExpenseTrendData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={monthlyExpenseTrendData} margin={{ top: 8, right: 16, left: -16, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="expenseTrendGlow" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.4} />
+                            <stop offset="95%" stopColor="var(--primary)" stopOpacity={0.0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="4 4" stroke="var(--border-muted)" vertical={false} />
+                        <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 10 }} tickLine={false} />
+                        <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `₹${v}`} />
+                        <Tooltip content={<CustomTooltip formatter={formatCurrency} />} />
+                        <Area
+                          type="monotone"
+                          dataKey="amount"
+                          name="Spent Amount"
+                          stroke="var(--primary)"
+                          strokeWidth={3}
+                          fillOpacity={1}
+                          fill="url(#expenseTrendGlow)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
+                      No monthly expense trends available
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
+        {/* Navigation Controls */}
+        <button
+          type="button"
+          onClick={prevSlide}
+          aria-label="Previous chart"
+          style={{
+            position: 'absolute',
+            left: '4px',
+            top: 'calc(50% - 18px)',
+            width: '36px',
+            height: '36px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid var(--border-muted)',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 10,
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'var(--text-main)';
+            e.currentTarget.style.borderColor = 'var(--primary)';
+            e.currentTarget.style.boxShadow = '0 0 12px var(--primary-glow)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--text-muted)';
+            e.currentTarget.style.borderColor = 'var(--border-muted)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          onClick={nextSlide}
+          aria-label="Next chart"
+          style={{
+            position: 'absolute',
+            right: '4px',
+            top: 'calc(50% - 18px)',
+            width: '36px',
+            height: '36px',
+            borderRadius: '50%',
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(8px)',
+            border: '1px solid var(--border-muted)',
+            color: 'var(--text-muted)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 10,
+            transition: 'all 0.2s ease',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = 'var(--text-main)';
+            e.currentTarget.style.borderColor = 'var(--primary)';
+            e.currentTarget.style.boxShadow = '0 0 12px var(--primary-glow)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = 'var(--text-muted)';
+            e.currentTarget.style.borderColor = 'var(--border-muted)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+
+        {/* Pagination Dots */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '16px' }}>
+          {[0, 1].map((idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => setCurrentSlide(idx)}
+              aria-label={`Go to slide ${idx + 1}`}
+              style={{
+                width: currentSlide === idx ? '24px' : '8px',
+                height: '8px',
+                borderRadius: '4px',
+                backgroundColor: currentSlide === idx ? 'var(--primary)' : 'var(--border-muted)',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
